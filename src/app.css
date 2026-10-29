@@ -43,46 +43,45 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #17181a;
-    --bg-panel: #1d1f22;
-    --bg-sidebar: #1a1c1f;
-    --bg-editor: #1f2124;
-    --bg-pdf: #141517;
-    --bg-hover: #2a2d31;
-    --bg-selected: #23383a;
-    --border: #2e3135;
-    --border-strong: #45494f;
-    --text: #d7d5cf;
-    --text-strong: #f1efe9;
-    --text-muted: #9a978f;
-    --text-faint: #66645e;
-    --accent: #5fb49a;
-    --accent-text: #0f1a16;
-    --accent-soft: #1d3530;
-    --danger: #ef6b62;
-    --warning: #e3a93a;
-    --ok: #5fb49a;
-    --spell: #ef6b62;
-    --selection: #2c4a42;
-    --selection-match: #29342f;
-    --search-match: #6b5a1c;
-    --active-line: #24272b;
-    --error-line: #3a2422;
-    --warning-line: #362d1b;
-    --shadow: 0 10px 30px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
-    --page-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+/* El tema lo fija lib/theme.svelte.ts (claro, oscuro o el del sistema). */
+:root[data-theme="dark"] {
+  --bg: #17181a;
+  --bg-panel: #1d1f22;
+  --bg-sidebar: #1a1c1f;
+  --bg-editor: #1f2124;
+  --bg-pdf: #141517;
+  --bg-hover: #2a2d31;
+  --bg-selected: #23383a;
+  --border: #2e3135;
+  --border-strong: #45494f;
+  --text: #d7d5cf;
+  --text-strong: #f1efe9;
+  --text-muted: #9a978f;
+  --text-faint: #66645e;
+  --accent: #5fb49a;
+  --accent-text: #0f1a16;
+  --accent-soft: #1d3530;
+  --danger: #ef6b62;
+  --warning: #e3a93a;
+  --ok: #5fb49a;
+  --spell: #ef6b62;
+  --selection: #2c4a42;
+  --selection-match: #29342f;
+  --search-match: #6b5a1c;
+  --active-line: #24272b;
+  --error-line: #3a2422;
+  --warning-line: #362d1b;
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
+  --page-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
 
-    --syn-command: #6cc4a8;
-    --syn-math: #c792ea;
-    --syn-arg: #e2a26b;
-    --syn-number: #e2a26b;
-    --syn-bracket: #8d8a82;
-    --syn-comment: #6d6b65;
+  --syn-command: #6cc4a8;
+  --syn-math: #c792ea;
+  --syn-arg: #e2a26b;
+  --syn-number: #e2a26b;
+  --syn-bracket: #8d8a82;
+  --syn-comment: #6d6b65;
 
-    color-scheme: dark;
-  }
+  color-scheme: dark;
 }
 
 * {

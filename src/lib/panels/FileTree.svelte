@@ -3,7 +3,21 @@
   import { api } from "../api";
   import { app } from "../store.svelte";
 
+  // Archivos que genera LaTeX al compilar (de Editex van a .editex/, pero pueden venir de otros editores).
+  const GENERATED =
+    /\.(aux|log|fls|fdb_latexmk|synctex(\.gz)?|synctex\(busy\)|toc|lof|lot|out|bbl|blg|bcf|run\.xml|nav|snm|vrb|idx|ilg|ind|xdv|dvi|glo|gls|glg|ist|acn|acr|alg|loa|thm|mtc\d*|maf|ptc|brf|mmz|memo|xref|4ct|4tc|lg|tmp|editex-tmp)$/i;
+
+  let showGenerated = $state(localStorage.getItem("editex.showGenerated") === "1");
   let expanded = $state<Record<string, boolean>>({});
+
+  function visible(list: FileNode[]): FileNode[] {
+    return showGenerated ? list : list.filter((n) => n.is_dir || !GENERATED.test(n.name));
+  }
+
+  function toggleGenerated() {
+    showGenerated = !showGenerated;
+    localStorage.setItem("editex.showGenerated", showGenerated ? "1" : "0");
+  }
   let creating = $state<null | "file" | "folder">(null);
   let newName = $state("");
 
@@ -46,6 +60,12 @@
     <span>Archivos</span>
     <button class="icon" title="Nuevo archivo" onclick={() => (creating = "file")}>＋</button>
     <button class="icon" title="Nueva carpeta" onclick={() => (creating = "folder")}>⊞</button>
+    <button
+      class="icon"
+      class:on={showGenerated}
+      title={showGenerated ? "Ocultar archivos generados (.aux, .log…)" : "Mostrar archivos generados (.aux, .log…)"}
+      onclick={toggleGenerated}>◌</button
+    >
   </div>
   {#if creating}
     <!-- svelte-ignore a11y_autofocus -->
@@ -63,7 +83,7 @@
   {/if}
   <div class="list">
     {#snippet nodes(list: FileNode[], depth: number)}
-      {#each list as node (node.path)}
+      {#each visible(list) as node (node.path)}
         <button
           class="row"
           class:active={node.path === app.active}

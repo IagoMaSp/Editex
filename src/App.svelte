@@ -9,6 +9,7 @@
   import Outline from "./lib/panels/Outline.svelte";
   import Problems from "./lib/panels/Problems.svelte";
   import Settings from "./lib/Settings.svelte";
+  import { theme } from "./lib/theme.svelte";
 
   let sidebarWidth = $state(Number(localStorage.getItem("editex.sidebar")) || 240);
   let pdfWidth = $state(Number(localStorage.getItem("editex.pdf")) || 46);
@@ -102,6 +103,7 @@
 
 {#if !app.root}
   <div class="welcome">
+    <button class="icon theme" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
     <div class="card">
       <div class="logo">E<span>χ</span></div>
       <h1>Editex</h1>
@@ -147,6 +149,7 @@
         ⚠{#if errors}<span class="count">{errors}</span>{/if}
       </button>
       <button class="icon" class:on={showPdf} title="Vista previa PDF" onclick={() => (showPdf = !showPdf)}>▤</button>
+      <button class="icon" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
       <button class="icon" class:on={showSettings} title="Ajustes" onclick={() => (showSettings = !showSettings)}>⚙</button>
     </header>
 
@@ -205,6 +208,11 @@
     place-items: center;
     background: radial-gradient(circle at 30% 20%, var(--accent-soft), transparent 60%), var(--bg);
   }
+  .theme {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+  }
   .card {
     width: min(460px, 90vw);
     padding: 36px;
@@ -217,11 +225,13 @@
     width: 56px;
     height: 56px;
     border-radius: 14px;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: var(--accent);
     color: var(--accent-text);
-    font: 700 26px var(--font-serif);
+    font: 700 24px var(--font-serif);
+    white-space: nowrap;
   }
   .logo span {
     font-style: italic;
