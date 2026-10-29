@@ -9,16 +9,19 @@
   import Outline from "./lib/panels/Outline.svelte";
   import Problems from "./lib/panels/Problems.svelte";
   import Settings from "./lib/Settings.svelte";
+  import SearchPanel from "./lib/panels/SearchPanel.svelte";
+  import CommandPalette, { type PaletteItem } from "./lib/CommandPalette.svelte";
   import { theme } from "./lib/theme.svelte";
+  import { isTextFile } from "./lib/store.svelte";
+  import { FIGURES_DIR, IMAGE_EXT, insertFigure } from "./lib/editor/images";
+  import { recheckSpelling } from "./lib/editor/spell";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import type { Engine, FileNode, SpellLang, AutoCompile } from "./lib/api";
 
   let sidebarWidth = $state(Number(localStorage.getItem("editex.sidebar")) || 240);
   let pdfWidth = $state(Number(localStorage.getItem("editex.pdf")) || 46);
-  let showSidebar = $state(true);
-  let showPdf = $state(true);
-  let showProblems = $state(false);
-  let showSettings = $state(false);
-  let sideTab = $state<"files" | "outline">("files");
   let main = $state<HTMLDivElement>();
+  const ui = app.ui;
 
   const projectName = $derived(app.root?.split("/").pop() ?? "");
   const errors = $derived(app.diagnostics.filter((d) => d.severity === "error").length);
@@ -75,16 +78,123 @@
     };
   }
 
+  function allFiles(nodes: FileNode[]): string[] {
+    return nodes.flatMap((n) => (n.is_dir ? allFiles(n.children) : [n.path]));
+  }
+
+  function openSearch() {
+    ui.sidebar = true;
+    ui.sideTab = "search";
+  }
+
+  async function setSetting<K extends keyof typeof app.settings>(key: K, value: (typeof app.settings)[K]) {
+    app.settings[key] = value;
+    await app.saveSettings();
+    if (key === "spellLang") app.editor.view?.dispatch({ effects: recheckSpelling.of(null) });
+  }
+
+  const commands = $derived.by((): PaletteItem[] => {
+    const c = (label: string, run: () => unknown, detail?: string): PaletteItem => ({ label, detail, kind: "›", run: () => void run() });
+    const engines: [Engine, string][] = [["pdflatex", "pdfLaTeX"], ["xelatex", "XeLaTeX"], ["lualatex", "LuaLaTeX"]];
+    const langs: [SpellLang, string][] = [["es+en", "español + inglés"], ["es", "español"], ["en", "inglés"], ["off", "desactivada"]];
+    const autos: [AutoCompile, string][] = [["off", "nunca"], ["save", "al guardar"], ["idle", "al dejar de escribir"]];
+    return [
+      c("Compilar", () => app.compile(), "Ctrl+Enter"),
+      c("Compilación completa", () => app.compile(true), "Ctrl+Shift+Enter"),
+      c("Detener compilación", () => api.cancelCompile()),
+      c("Guardar", () => app.saveActive(), "Ctrl+S"),
+      c("Guardar todo", () => app.saveAll()),
+      c("Ir al archivo…", () => (ui.palette = "files"), "Ctrl+P"),
+      c("Buscar en el proyecto", openSearch, "Ctrl+Shift+F"),
+      c("Ver posición actual en el PDF", () => {
+        const v = app.editor.view;
+        if (v) app.syncForward?.(v.state.doc.lineAt(v.state.selection.main.head).number);
+      }, "Ctrl+J"),
+      c(`${ui.sidebar ? "Ocultar" : "Mostrar"} panel lateral`, () => (ui.sidebar = !ui.sidebar)),
+      c(`${ui.pdf ? "Ocultar" : "Mostrar"} vista previa PDF`, () => (ui.pdf = !ui.pdf)),
+      c(`${ui.problems ? "Ocultar" : "Mostrar"} problemas`, () => (ui.problems = !ui.problems)),
+      c("Mostrar esquema", () => ((ui.sidebar = true), (ui.sideTab = "outline"))),
+      c(`Cambiar tema (ahora: ${theme.label.replace("Tema: ", "")})`, () => theme.cycle()),
+      c(`${app.settings.fastMode ? "Desactivar" : "Activar"} modo rápido`, () => setSetting("fastMode", !app.settings.fastMode)),
+      ...engines.map(([e, name]) => c(`Motor: ${name}`, () => setSetting("engine", e), app.settings.engine === e ? "actual" : undefined)),
+      ...langs.map(([l, name]) => c(`Ortografía: ${name}`, () => setSetting("spellLang", l), app.settings.spellLang === l ? "actual" : undefined)),
+      ...autos.map(([a, name]) => c(`Compilar automáticamente: ${name}`, () => setSetting("autoCompile", a), app.settings.autoCompile === a ? "actual" : undefined)),
+      c("Ajustes del proyecto", () => (ui.settings = true)),
+      c("Abrir carpeta…", openFolder, "Ctrl+O"),
+      c("Importar ZIP de Overleaf…", importZip),
+      c("Exportar proyecto como ZIP…", exportZip),
+    ];
+  });
+
+  const fileItems = $derived.by((): PaletteItem[] => {
+    const files: PaletteItem[] = allFiles(app.files)
+      .filter(isTextFile)
+      .map((f) => ({ label: f.split("/").pop()!, detail: f, kind: "T", run: () => app.openFile(f) }));
+    const sections: PaletteItem[] = app.outline.map((o) => ({
+      label: o.title || "(sin título)",
+      detail: `${o.file}:${o.line}`,
+      kind: "§",
+      run: () => app.openFile(o.file, o.line),
+    }));
+    return [...files, ...sections];
+  });
+
+  /** Archivos arrastrados desde el gestor de archivos del sistema. */
+  async function onOsDrop(paths: string[], x: number, y: number) {
+    if (!app.root || paths.length === 0) return;
+    const el = document.elementFromPoint(x, y);
+    const view = app.editor.view;
+    if (el?.closest(".cm-editor") && view && app.active?.endsWith(".tex")) {
+      const images = paths.filter((p) => IMAGE_EXT.test(p));
+      if (!images.length) return app.notify("Solo se pueden insertar imágenes (png, jpg, pdf, eps)");
+      let pos = view.posAtCoords({ x, y }) ?? view.state.selection.main.head;
+      for (const src of images) {
+        const rel = await api.importFile(app.root, src, FIGURES_DIR).catch((e) => (app.notify(String(e)), null));
+        if (!rel) continue;
+        insertFigure(view, rel, pos);
+        pos = view.state.selection.main.head;
+      }
+      return;
+    }
+    // En el árbol: copiar a la carpeta bajo el puntero (o a la raíz).
+    const target = el?.closest<HTMLElement>("[data-drop]");
+    if (target || el?.closest("aside")) {
+      const p = target?.dataset.drop ?? "";
+      const dir = target?.dataset.dir === "1" ? p : p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+      for (const src of paths) await api.importFile(app.root, src, dir).catch((e) => app.notify(String(e)));
+      await app.refreshTree();
+      app.notify(`${paths.length} archivo(s) copiados a ${dir || "la raíz del proyecto"}`);
+    }
+  }
+
   onMount(() => {
     void api.initialProject().then((dir) => {
       if (dir) void app.openProject(dir);
     });
+    const unlisten = getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type !== "drop") return;
+      const dpr = window.devicePixelRatio || 1;
+      void onOsDrop(e.payload.paths, e.payload.position.x / dpr, e.payload.position.y / dpr);
+    });
+    return () => void unlisten.then((f) => f());
   });
 
   function onKey(e: KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return;
-    // Dentro del editor los atajos los gestiona CodeMirror.
+    if (!mod || !app.root) return;
+    // Atajos globales, también dentro del editor.
+    const key = e.key.toLowerCase();
+    if (key === "p") {
+      e.preventDefault();
+      ui.palette = e.shiftKey ? "commands" : "files";
+      return;
+    }
+    if (key === "f" && e.shiftKey) {
+      e.preventDefault();
+      openSearch();
+      return;
+    }
+    // Dentro del editor el resto de atajos los gestiona CodeMirror.
     if ((e.target as HTMLElement)?.closest?.(".cm-editor")) return;
     if (e.key === "Enter") {
       e.preventDefault();
@@ -125,7 +235,7 @@
 {:else}
   <div class="app">
     <header>
-      <button class="icon" title="Panel lateral" onclick={() => (showSidebar = !showSidebar)}>☰</button>
+      <button class="icon" title="Panel lateral" onclick={() => (ui.sidebar = !ui.sidebar)}>☰</button>
       <span class="brand">Editex</span>
       <span class="project" title={app.root}>{projectName}</span>
       <div class="menu">
@@ -145,35 +255,36 @@
         <button class="ghost" onclick={() => api.cancelCompile()}>Detener</button>
       {/if}
       <div class="spacer"></div>
-      <button class="icon" class:on={showProblems} title="Problemas y salida" onclick={() => (showProblems = !showProblems)}>
+      <button class="icon" class:on={ui.problems} title="Problemas y salida" onclick={() => (ui.problems = !ui.problems)}>
         ⚠{#if errors}<span class="count">{errors}</span>{/if}
       </button>
-      <button class="icon" class:on={showPdf} title="Vista previa PDF" onclick={() => (showPdf = !showPdf)}>▤</button>
+      <button class="icon" class:on={ui.pdf} title="Vista previa PDF" onclick={() => (ui.pdf = !ui.pdf)}>▤</button>
       <button class="icon" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
-      <button class="icon" class:on={showSettings} title="Ajustes" onclick={() => (showSettings = !showSettings)}>⚙</button>
+      <button class="icon" class:on={ui.settings} title="Ajustes" onclick={() => (ui.settings = !ui.settings)}>⚙</button>
     </header>
 
-    {#if showSettings}<Settings onclose={() => (showSettings = false)} />{/if}
+    {#if ui.settings}<Settings onclose={() => (ui.settings = false)} />{/if}
 
     <div class="main" bind:this={main}>
-      {#if showSidebar}
+      {#if ui.sidebar}
         <aside style="width:{sidebarWidth}px">
           <div class="seg">
-            <button class:sel={sideTab === "files"} onclick={() => (sideTab = "files")}>Archivos</button>
-            <button class:sel={sideTab === "outline"} onclick={() => (sideTab = "outline")}>Esquema</button>
+            <button class:sel={ui.sideTab === "files"} onclick={() => (ui.sideTab = "files")}>Archivos</button>
+            <button class:sel={ui.sideTab === "outline"} onclick={() => (ui.sideTab = "outline")}>Esquema</button>
+            <button class:sel={ui.sideTab === "search"} title="Ctrl+Shift+F" onclick={() => (ui.sideTab = "search")}>Buscar</button>
           </div>
-          {#if sideTab === "files"}<FileTree />{:else}<Outline />{/if}
+          {#if ui.sideTab === "files"}<FileTree />{:else if ui.sideTab === "outline"}<Outline />{:else}<SearchPanel />{/if}
         </aside>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="split" onpointerdown={drag("sidebar")}></div>
       {/if}
       <section class="center">
         <div class="editor"><Editor /></div>
-        {#if showProblems}
-          <div class="problems"><Problems onclose={() => (showProblems = false)} /></div>
+        {#if ui.problems}
+          <div class="problems"><Problems onclose={() => (ui.problems = false)} /></div>
         {/if}
       </section>
-      {#if showPdf}
+      {#if ui.pdf}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="split" onpointerdown={drag("pdf")}></div>
         <section class="pdf" style="width:{pdfWidth}%"><PdfViewer /></section>
@@ -186,15 +297,21 @@
       </span>
       <span>{app.settings.engine}</span>
       {#if app.lastResult}
-        <button class="link" onclick={() => (showProblems = true)}>
+        <button class="link" onclick={() => (ui.problems = true)}>
           <span class:bad={errors > 0}>{errors} errores</span> · {warnings} advertencias
         </button>
         <span>{app.lastResult.mode} · {(app.lastResult.durationMs / 1000).toFixed(2)} s</span>
       {/if}
       <div class="spacer"></div>
-      <span>Ctrl+Clic en el PDF → código · Ctrl+J → PDF</span>
+      <span>Ctrl+Shift+P comandos · Ctrl+P archivos · Ctrl+Clic en PDF → código · Ctrl+J → PDF</span>
     </footer>
   </div>
+{/if}
+
+{#if ui.palette === "commands"}
+  <CommandPalette items={commands} placeholder="Escribe un comando…" onclose={() => (ui.palette = null)} />
+{:else if ui.palette === "files"}
+  <CommandPalette items={fileItems} placeholder="Ir a archivo o sección…" onclose={() => (ui.palette = null)} />
 {/if}
 
 {#if app.toast}

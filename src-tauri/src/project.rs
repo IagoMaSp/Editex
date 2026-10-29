@@ -140,7 +140,89 @@ pub fn create_folder(root: String, path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn rename_path(root: String, from: String, to: String) -> Result<(), String> {
-    fs::rename(resolve(&root, &from)?, resolve(&root, &to)?).map_err(|e| e.to_string())
+    let (src, dst) = (resolve(&root, &from)?, resolve(&root, &to)?);
+    if dst.exists() {
+        return Err(format!("Ya existe {to}"));
+    }
+    if dst.starts_with(&src) {
+        return Err("No se puede mover una carpeta dentro de sí misma".into());
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::rename(src, dst).map_err(|e| e.to_string())
+}
+
+/// Mueve a la papelera del sistema (recuperable), nunca borra definitivamente.
+#[tauri::command]
+pub fn trash_path(root: String, path: String) -> Result<(), String> {
+    let full = resolve(&root, &path)?;
+    if path.is_empty() || full == Path::new(&root) {
+        return Err("No se puede borrar la raíz del proyecto".into());
+    }
+    trash::delete(&full).map_err(|e| format!("No se pudo mover a la papelera: {e}"))
+}
+
+/// Ruta libre `dir/stem.ext`, añadiendo `-2`, `-3`... si ya existe.
+fn unique_rel(root: &str, dir: &str, stem: &str, ext: &str) -> Result<String, String> {
+    for i in 1..1000 {
+        let name = if i == 1 { format!("{stem}.{ext}") } else { format!("{stem}-{i}.{ext}") };
+        let rel = if dir.is_empty() { name } else { format!("{dir}/{name}") };
+        if !resolve(root, &rel)?.exists() {
+            return Ok(rel);
+        }
+    }
+    Err("demasiados archivos con el mismo nombre".into())
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(b) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Guarda bytes (p. ej. una imagen pegada) en `dir/stem.ext` sin sobrescribir.
+/// Los datos llegan como cuerpo binario; root/dir/stem/ext en cabeceras URL-encoded.
+#[tauri::command]
+pub fn save_binary(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("se esperaban datos binarios".into());
+    };
+    let header = |k: &str| -> Result<String, String> {
+        let v = request.headers().get(k).ok_or(format!("falta {k}"))?;
+        Ok(percent_decode(v.to_str().map_err(|e| e.to_string())?))
+    };
+    let (root, dir) = (header("x-root")?, header("x-dir")?);
+    let rel = unique_rel(&root, &dir, &header("x-stem")?, &header("x-ext")?)?;
+    let full = resolve(&root, &rel)?;
+    fs::create_dir_all(full.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::write(full, data).map_err(|e| e.to_string())?;
+    Ok(rel)
+}
+
+/// Copia un archivo externo (arrastrado desde el gestor de archivos) dentro del proyecto.
+#[tauri::command]
+pub fn import_file(root: String, source: String, dir: String) -> Result<String, String> {
+    let src = Path::new(&source);
+    let stem = src.file_stem().ok_or("ruta sin nombre")?.to_string_lossy();
+    let ext = src.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let rel = unique_rel(&root, &dir, &stem, &ext)?;
+    let full = resolve(&root, &rel)?;
+    fs::create_dir_all(full.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::copy(src, full).map_err(|e| e.to_string())?;
+    Ok(rel)
 }
 
 #[tauri::command]
@@ -318,6 +400,12 @@ mod tests {
     #[test]
     fn balanced_argument() {
         assert_eq!(balanced_arg("Intro {\\em a} b} resto"), "Intro {\\em a} b");
+    }
+
+    #[test]
+    fn decodes_percent() {
+        assert_eq!(percent_decode("/home/iago/F%C3%ADsica%20x"), "/home/iago/Física x");
+        assert_eq!(percent_decode("100%"), "100%");
     }
 
     #[test]

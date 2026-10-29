@@ -8,6 +8,7 @@ Editex: editor LaTeX de escritorio (alternativa local a Overleaf). Tauri 2 + Rus
 pnpm install
 pnpm tauri dev                       # app en modo desarrollo
 pnpm tauri dev -- -- examples/tesis  # abre un proyecto directamente (argv → initial_project)
+pnpm dev  →  http://localhost:1420/?mock   # interfaz en el navegador con backend simulado (src/dev/mock.ts)
 pnpm check                           # svelte-check (TS + Svelte)
 pnpm build                           # build del frontend (vite)
 cd src-tauri && cargo test           # tests unitarios Rust
@@ -35,13 +36,18 @@ Cada módulo expone `#[tauri::command]`s registrados en `lib.rs`. El frontend tr
 - `spell.rs` — tokenizador LaTeX-aware + `spellbook` (Hunspell). Devuelve offsets **UTF-16** (los de CodeMirror). Diccionarios en `/usr/share/hunspell` y similares; diccionario personal en `app_config_dir/words.txt`.
 - `lsp.rs` — lanza `texlab` y hace de puente stdio ↔ eventos Tauri (`lsp-message`), añadiendo/quitando cabeceras `Content-Length`.
 - `synctex.rs` — llama al binario `synctex view/edit`; coordenadas en puntos PDF desde arriba-izquierda.
-- `project.rs` — árbol de archivos, lectura/escritura atómica, outline (sigue `\input`/`\include`), ZIP, watcher (`fs-changed`).
+- `search.rs` — buscar/reemplazar en todo el proyecto (regex crate); columnas en UTF-16; reemplaza por líneas conservando `\r\n`.
+- `project.rs` — `trash_path` mueve a la papelera del sistema (crate `trash`, nunca borrado definitivo); `save_binary` recibe el cuerpo binario crudo con root/dir/stem/ext en cabeceras URL-encoded; `import_file` copia archivos externos sin sobrescribir. Además: árbol de archivos, lectura/escritura atómica, outline (sigue `\input`/`\include`), ZIP, watcher (`fs-changed`).
 
 ### Frontend (`src/`)
 - `lib/store.svelte.ts` — estado global (`app`, runes de Svelte 5) y acciones: abrir proyecto, archivos, guardar, compilar. Ajustes por proyecto en `.editex/settings.json`.
 - `lib/editor/manager.ts` — **una sola `EditorView`** y un `EditorState` por archivo (se intercambian con `setState`). La extensión LSP va en un `Compartment` porque el cliente llega después de cargar archivos.
 - Diagnósticos: texlab usa `@codemirror/lint` (`serverDiagnostics`); por eso ortografía (`spell.ts`) y errores de compilación (`diagnostics.ts`) son `StateField`s de decoraciones propias — **no usar `linter()`/`setDiagnostics`**, pisaría los de texlab.
-- `lib/pdf/PdfViewer.svelte` — pdf.js; solo pinta páginas visibles, libera canvas lejanos, mantiene los canvas viejos hasta que el nuevo está listo (sin parpadeo).
+- `lib/pdf/PdfViewer.svelte` — pdf.js con capa de texto (`TextLayer`, necesita `--total-scale-factor` en la página); solo pinta páginas visibles, libera canvas lejanos, mantiene los canvas viejos hasta que el nuevo está listo (sin parpadeo).
+- `lib/CommandPalette.svelte` — paleta (Ctrl+Shift+P, comandos definidos en `App.svelte`) y abrir rápido (Ctrl+P, archivos + secciones del esquema), con búsqueda difusa sin acentos.
+- `lib/editor/images.ts` — pegar imágenes → `figuras/` + entorno `figure`. Soltar archivos desde el sistema se gestiona en `App.svelte` (`onDragDropEvent`).
+- Árbol (`FileTree.svelte`): arrastrar con eventos de puntero (no HTML5 DnD, poco fiable en el webview); destino = elemento con `data-drop`.
+- `app.ui` (store) guarda el estado de paneles para que la paleta pueda controlarlos.
 - `lib/api.ts` — envoltorios tipados de los comandos; mantener sincronizado con los structs Rust (`serde(rename_all = "camelCase")` en request/result de compilación).
 - Estilos: variables CSS en `app.css` (claro/oscuro con `prefers-color-scheme`); el tema de CodeMirror usa esas variables.
 

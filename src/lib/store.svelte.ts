@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type AutoCompile, type CompileResult, type Diagnostic, type Engine, type FileNode, type OutlineItem, type SpellLang } from "./api";
 import { EditorManager } from "./editor/manager";
 import { startLsp } from "./editor/lsp";
+import { FIGURES_DIR } from "./editor/images";
 
 export interface ProjectSettings {
   main: string | null;
@@ -61,6 +62,16 @@ class AppState {
   recents = $state<string[]>(loadRecents());
   toast = $state<string | null>(null);
 
+  /** Estado de la interfaz que también controla la paleta de comandos. */
+  ui = $state({
+    sidebar: true,
+    sideTab: "files" as "files" | "outline" | "search",
+    pdf: true,
+    problems: false,
+    settings: false,
+    palette: null as null | "commands" | "files",
+  });
+
   editor = new EditorManager({
     onDirty: (path, dirty) => (this.dirty[path] = dirty),
     onIdle: (path) => {
@@ -70,6 +81,17 @@ class AppState {
     onCompile: (full) => void this.compile(full),
     onSyncForward: (line) => this.syncForward?.(line),
     spellLang: () => this.settings.spellLang,
+    saveImage: async (stem, ext, data) => {
+      if (!this.root) return null;
+      try {
+        const path = await api.saveBinary(this.root, FIGURES_DIR, stem, ext, data);
+        this.notify(`Imagen guardada en ${path}`);
+        return path;
+      } catch (e) {
+        this.notify(`No se pudo guardar la imagen: ${e}`);
+        return null;
+      }
+    },
   });
 
   /** Lo registra el visor PDF para hacer forward search. */
@@ -168,6 +190,69 @@ class AppState {
     this.editor.show(path);
     this.editor.setCompileDiagnostics(this.diagnostics.filter((d) => d.file === path));
     if (line) this.editor.gotoLine(line);
+  }
+
+  /** Abre un archivo y selecciona `from..to` (columnas UTF-16) en la línea indicada. */
+  async openAt(path: string, line: number, from: number, to: number) {
+    await this.openFile(path);
+    this.editor.selectInLine(line, from, to);
+  }
+
+  /** Rutas abiertas afectadas al mover/borrar `path` (archivo o carpeta). */
+  private affected(path: string) {
+    return this.openFiles.filter((p) => p === path || p.startsWith(path + "/"));
+  }
+
+  async movePath(from: string, to: string) {
+    if (!this.root || from === to) return;
+    const moved = this.affected(from);
+    for (const p of moved) await this.save(p);
+    try {
+      await api.renamePath(this.root, from, to);
+    } catch (e) {
+      this.notify(String(e));
+      return;
+    }
+    const remap = (p: string) => to + p.slice(from.length);
+    const wasActive = this.active;
+    for (const p of moved) this.editor.unload(p);
+    this.openFiles = this.openFiles.map((p) => (moved.includes(p) ? remap(p) : p));
+    for (const p of moved) delete this.dirty[p];
+    if (this.settings.main && (this.settings.main === from || this.settings.main.startsWith(from + "/"))) {
+      this.settings.main = remap(this.settings.main);
+      await this.saveSettings();
+    }
+    await this.refreshTree();
+    await this.refreshOutline();
+    if (wasActive && moved.includes(wasActive)) {
+      this.active = null;
+      await this.openFile(remap(wasActive));
+    }
+  }
+
+  async trashPath(path: string) {
+    if (!this.root) return;
+    try {
+      await api.trashPath(this.root, path);
+    } catch (e) {
+      this.notify(String(e));
+      return;
+    }
+    for (const p of this.affected(path)) {
+      this.dirty[p] = false;
+      await this.closeFile(p);
+    }
+    await this.refreshTree();
+    await this.refreshOutline();
+    this.notify(`«${path}» movido a la papelera`);
+  }
+
+  /** Tras reemplazar en disco: recarga los archivos abiertos (sin cambios locales). */
+  async reloadOpenFiles() {
+    if (!this.root) return;
+    for (const p of this.openFiles) {
+      if (!this.dirty[p]) this.editor.reloadIfChanged(p, await api.readFile(this.root, p));
+    }
   }
 
   async closeFile(path: string) {

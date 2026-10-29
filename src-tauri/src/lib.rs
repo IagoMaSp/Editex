@@ -2,6 +2,7 @@ mod compile;
 mod log_parser;
 mod lsp;
 mod project;
+mod search;
 mod spell;
 mod synctex;
 
@@ -21,6 +22,11 @@ pub fn run() {
             project::write_file,
             project::create_folder,
             project::rename_path,
+            project::trash_path,
+            project::save_binary,
+            project::import_file,
+            search::search_project,
+            search::replace_in_project,
             project::read_binary,
             project::outline,
             project::import_zip,

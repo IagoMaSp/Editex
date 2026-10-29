@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as pdfjs from "pdfjs-dist";
   import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+  import "pdfjs-dist/web/pdf_viewer.css";
   import { onMount, tick } from "svelte";
   import { api } from "../api";
   import { app } from "../store.svelte";
@@ -111,6 +112,7 @@
       else if (distance > margin * 4 && renderedKey.has(i)) {
         // Libera memoria de páginas lejanas.
         el.querySelector("canvas")?.remove();
+        el.querySelector(".textLayer")?.remove();
         renderedKey.delete(i);
       }
       if (r.top <= view.top + view.height / 2 && r.bottom >= view.top + view.height / 2) currentPage = i + 1;
@@ -126,10 +128,21 @@
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
         await page.render({ canvas, viewport }).promise;
+        // Capa de texto invisible encima del canvas: permite seleccionar y copiar.
+        const textDiv = document.createElement("div");
+        textDiv.className = "textLayer";
+        const textLayer = new pdfjs.TextLayer({
+          textContentSource: page.streamTextContent(),
+          container: textDiv,
+          viewport: page.getViewport({ scale }),
+        });
+        await textLayer.render();
         if (thisDoc !== doc) break;
         const el = pageEls[i];
         el?.querySelector("canvas")?.remove();
+        el?.querySelector(".textLayer")?.remove();
         el?.prepend(canvas);
+        el?.append(textDiv);
         renderedKey.set(i, key);
       } catch (e) {
         if (thisDoc === doc) console.warn("pdf render", e);
@@ -227,7 +240,7 @@
       <div
         class="page"
         bind:this={pageEls[i]}
-        style="width:{p.w * scale}px;height:{p.h * scale}px"
+        style="width:{p.w * scale}px;height:{p.h * scale}px;--total-scale-factor:{scale};--scale-round-x:1px;--scale-round-y:1px"
         onclick={(e) => onPageClick(e, i)}
       >
         {#if highlight && highlight.page === i + 1}
@@ -285,6 +298,12 @@
     box-shadow: var(--page-shadow);
     border-radius: 2px;
   }
+  .page :global(.textLayer) {
+    z-index: 1;
+  }
+  .page :global(.textLayer ::selection) {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
   .page :global(canvas) {
     width: 100%;
     height: 100%;
@@ -296,6 +315,7 @@
   }
   .hl {
     position: absolute;
+    z-index: 2;
     border-radius: 4px;
     background: color-mix(in srgb, var(--accent) 25%, transparent);
     outline: 2px solid var(--accent);

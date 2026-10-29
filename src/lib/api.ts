@@ -56,6 +56,25 @@ export interface PdfLocation {
   height: number;
 }
 
+export interface SearchOptions {
+  query: string;
+  regex: boolean;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+}
+
+export interface SearchMatch {
+  line: number;
+  from: number;
+  to: number;
+  text: string;
+}
+
+export interface FileMatches {
+  file: string;
+  matches: SearchMatch[];
+}
+
 export type Engine = "pdflatex" | "xelatex" | "lualatex";
 export type SpellLang = "es" | "en" | "es+en" | "off";
 export type AutoCompile = "off" | "save" | "idle";
@@ -68,6 +87,16 @@ export const api = {
   writeFile: (root: string, path: string, content: string) => invoke<void>("write_file", { root, path, content }),
   createFolder: (root: string, path: string) => invoke<void>("create_folder", { root, path }),
   renamePath: (root: string, from: string, to: string) => invoke<void>("rename_path", { root, from, to }),
+  trashPath: (root: string, path: string) => invoke<void>("trash_path", { root, path }),
+  importFile: (root: string, source: string, dir: string) => invoke<string>("import_file", { root, source, dir }),
+  /** Guarda bytes en `dir/stem.ext` (sin sobrescribir) y devuelve la ruta relativa final. */
+  saveBinary: (root: string, dir: string, stem: string, ext: string, data: Uint8Array) =>
+    invoke<string>("save_binary", data, {
+      headers: { "x-root": encodeURIComponent(root), "x-dir": encodeURIComponent(dir), "x-stem": encodeURIComponent(stem), "x-ext": encodeURIComponent(ext) },
+    }),
+  searchProject: (root: string, opts: SearchOptions) => invoke<FileMatches[]>("search_project", { root, opts }),
+  replaceInProject: (root: string, opts: SearchOptions, replacement: string, files: string[]) =>
+    invoke<number>("replace_in_project", { root, opts, replacement, files }),
   readBinary: (path: string) => invoke<ArrayBuffer>("read_binary", { path }),
   outline: (root: string, main: string) => invoke<OutlineItem[]>("outline", { root, main }),
   importZip: (zipPath: string, dest: string) => invoke<string>("import_zip", { zipPath, dest }),

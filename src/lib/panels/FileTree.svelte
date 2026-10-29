@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from "@tauri-apps/plugin-dialog";
   import type { FileNode } from "../api";
   import { api } from "../api";
   import { app } from "../store.svelte";
@@ -9,6 +10,18 @@
 
   let showGenerated = $state(localStorage.getItem("editex.showGenerated") === "1");
   let expanded = $state<Record<string, boolean>>({});
+  /** Creación en curso: tipo y carpeta destino ("" = raíz). */
+  let creating = $state<null | { kind: "file" | "folder"; dir: string }>(null);
+  let newName = $state("");
+  let renaming = $state<string | null>(null);
+  let renameValue = $state("");
+  let menu = $state<null | { x: number; y: number; node: FileNode | null }>(null);
+  let drag = $state<null | { node: FileNode; x: number; y: number; target: string | null }>(null);
+  let pending: { node: FileNode; x: number; y: number } | null = null;
+  let suppressClick = false;
+
+  const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+  const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
   function visible(list: FileNode[]): FileNode[] {
     return showGenerated ? list : list.filter((n) => n.is_dir || !GENERATED.test(n.name));
@@ -18,31 +31,121 @@
     showGenerated = !showGenerated;
     localStorage.setItem("editex.showGenerated", showGenerated ? "1" : "0");
   }
-  let creating = $state<null | "file" | "folder">(null);
-  let newName = $state("");
 
-  function toggle(path: string) {
-    expanded[path] = !expanded[path];
+  function startCreate(kind: "file" | "folder", dir = "") {
+    menu = null;
+    if (dir) expanded[dir] = true;
+    creating = { kind, dir };
+    newName = "";
   }
 
   async function create() {
     const name = newName.trim();
-    const kind = creating;
+    const target = creating;
     creating = null;
     newName = "";
-    if (!name || !app.root) return;
+    if (!name || !target || !app.root) return;
+    const path = join(target.dir, name);
     try {
-      if (kind === "folder") await api.createFolder(app.root, name);
+      if (target.kind === "folder") await api.createFolder(app.root, path);
       else {
-        const path = /\.[^/]+$/.test(name) ? name : `${name}.tex`;
-        await api.writeFile(app.root, path, "");
+        const file = /\.[^/]+$/.test(name) ? path : `${path}.tex`;
+        await api.writeFile(app.root, file, "");
         await app.refreshTree();
-        await app.openFile(path);
+        await app.openFile(file);
       }
       await app.refreshTree();
     } catch (e) {
       app.notify(String(e));
     }
+  }
+
+  function startRename(node: FileNode) {
+    menu = null;
+    renaming = node.path;
+    renameValue = node.name;
+  }
+
+  async function finishRename(node: FileNode) {
+    const name = renameValue.trim();
+    renaming = null;
+    if (!name || name === node.name || name.includes("/")) return;
+    await app.movePath(node.path, join(parentOf(node.path), name));
+  }
+
+  async function remove(node: FileNode) {
+    menu = null;
+    const what = node.is_dir ? `la carpeta «${node.name}» y todo su contenido` : `«${node.name}»`;
+    if (await ask(`¿Mover ${what} a la papelera?`, { title: "Eliminar", kind: "warning", okLabel: "Mover a la papelera" })) {
+      await app.trashPath(node.path);
+    }
+  }
+
+  async function setMain(node: FileNode) {
+    menu = null;
+    app.settings.main = node.path;
+    await app.saveSettings();
+    await app.refreshOutline();
+  }
+
+  function openMenu(e: MouseEvent, node: FileNode | null) {
+    e.preventDefault();
+    e.stopPropagation();
+    menu = { x: e.clientX, y: e.clientY, node };
+  }
+
+  // Arrastrar con eventos de puntero (más fiable que HTML5 DnD dentro del webview).
+  function onPointerDown(e: PointerEvent, node: FileNode) {
+    if (e.button !== 0 || renaming) return;
+    pending = { node, x: e.clientX, y: e.clientY };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  }
+
+  function dropTargetAt(x: number, y: number): string | null {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop]");
+    if (!el) return null;
+    const path = el.dataset.drop!;
+    // Soltar sobre un archivo = soltar en su carpeta.
+    return el.dataset.dir === "1" ? path : parentOf(path);
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (pending && !drag && Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 5) {
+      drag = { node: pending.node, x: e.clientX, y: e.clientY, target: null };
+      document.body.classList.add("dragging-file");
+    }
+    if (drag) {
+      const target = dropTargetAt(e.clientX, e.clientY);
+      const node = drag.node;
+      const valid = target !== null && target !== parentOf(node.path) && target !== node.path && !target.startsWith(node.path + "/");
+      drag = { ...drag, x: e.clientX, y: e.clientY, target: valid ? target : null };
+    }
+  }
+
+  async function onPointerUp() {
+    window.removeEventListener("pointermove", onPointerMove);
+    pending = null;
+    if (!drag) return;
+    const { node, target } = drag;
+    drag = null;
+    suppressClick = true;
+    setTimeout(() => (suppressClick = false));
+    document.body.classList.remove("dragging-file");
+    if (target === null) return;
+    if (target) expanded[target] = true;
+    await app.movePath(node.path, join(target, node.name));
+  }
+
+  function onRowClick(node: FileNode) {
+    if (suppressClick) return;
+    if (node.is_dir) expanded[node.path] = !expanded[node.path];
+    else void app.openFile(node.path);
+  }
+
+  function onRowKey(e: KeyboardEvent, node: FileNode) {
+    if (e.key === "F2") startRename(node);
+    else if (e.key === "Delete") void remove(node);
   }
 
   function icon(node: FileNode) {
@@ -55,11 +158,13 @@
   }
 </script>
 
+<svelte:window onclick={() => (menu = null)} onkeydown={(e) => e.key === "Escape" && (menu = null)} />
+
 <div class="tree">
   <div class="head">
     <span>Archivos</span>
-    <button class="icon" title="Nuevo archivo" onclick={() => (creating = "file")}>＋</button>
-    <button class="icon" title="Nueva carpeta" onclick={() => (creating = "folder")}>⊞</button>
+    <button class="icon" title="Nuevo archivo" onclick={() => startCreate("file")}>＋</button>
+    <button class="icon" title="Nueva carpeta" onclick={() => startCreate("folder")}>⊞</button>
     <button
       class="icon"
       class:on={showGenerated}
@@ -67,12 +172,14 @@
       onclick={toggleGenerated}>◌</button
     >
   </div>
-  {#if creating}
+
+  {#snippet newInput(depth: number)}
     <!-- svelte-ignore a11y_autofocus -->
     <input
       class="new"
+      style="margin-left:{10 + depth * 14}px"
       autofocus
-      placeholder={creating === "file" ? "capitulos/intro.tex" : "carpeta"}
+      placeholder={creating?.kind === "file" ? "nombre.tex" : "carpeta"}
       bind:value={newName}
       onkeydown={(e) => {
         if (e.key === "Enter") void create();
@@ -80,23 +187,60 @@
       }}
       onblur={() => void create()}
     />
-  {/if}
-  <div class="list">
+  {/snippet}
+
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="list"
+    class:drop-root={drag?.target === ""}
+    data-drop=""
+    data-dir="1"
+    oncontextmenu={(e) => openMenu(e, null)}
+  >
+    {#if creating?.dir === ""}{@render newInput(0)}{/if}
     {#snippet nodes(list: FileNode[], depth: number)}
       {#each visible(list) as node (node.path)}
-        <button
-          class="row"
-          class:active={node.path === app.active}
-          class:main={node.path === app.settings.main}
-          style="padding-left:{10 + depth * 14}px"
-          title={node.path}
-          onclick={() => (node.is_dir ? toggle(node.path) : app.openFile(node.path))}
-        >
-          <span class="ic" class:dir={node.is_dir}>{icon(node)}</span>
-          <span class="name">{node.name}</span>
-          {#if app.dirty[node.path]}<span class="dot"></span>{/if}
-        </button>
+        {#if renaming === node.path}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            class="new"
+            style="margin-left:{10 + depth * 14}px"
+            autofocus
+            bind:value={renameValue}
+            onfocus={(e) => {
+              // Selecciona el nombre sin la extensión.
+              const dot = renameValue.lastIndexOf(".");
+              e.currentTarget.setSelectionRange(0, dot > 0 && !node.is_dir ? dot : renameValue.length);
+            }}
+            onkeydown={(e) => {
+              if (e.key === "Enter") void finishRename(node);
+              if (e.key === "Escape") renaming = null;
+            }}
+            onblur={() => void finishRename(node)}
+          />
+        {:else}
+          <button
+            class="row"
+            class:active={node.path === app.active}
+            class:main={node.path === app.settings.main}
+            class:drop={drag?.target === node.path}
+            class:dragged={drag?.node.path === node.path}
+            style="padding-left:{10 + depth * 14}px"
+            title={node.path}
+            data-drop={node.path}
+            data-dir={node.is_dir ? "1" : "0"}
+            onclick={() => onRowClick(node)}
+            onpointerdown={(e) => onPointerDown(e, node)}
+            oncontextmenu={(e) => openMenu(e, node)}
+            onkeydown={(e) => onRowKey(e, node)}
+          >
+            <span class="ic" class:dir={node.is_dir}>{icon(node)}</span>
+            <span class="name">{node.name}</span>
+            {#if app.dirty[node.path]}<span class="dot"></span>{/if}
+          </button>
+        {/if}
         {#if node.is_dir && expanded[node.path]}
+          {#if creating?.dir === node.path}{@render newInput(depth + 1)}{/if}
           {@render nodes(node.children, depth + 1)}
         {/if}
       {/each}
@@ -104,6 +248,33 @@
     {@render nodes(app.files, 0)}
   </div>
 </div>
+
+{#if drag}
+  <div class="ghost" style="left:{drag.x + 12}px;top:{drag.y + 8}px">
+    {drag.node.name}{drag.target !== null ? ` → ${drag.target || "raíz"}` : ""}
+  </div>
+{/if}
+
+{#if menu}
+  {@const node = menu.node}
+  {@const dir = node ? (node.is_dir ? node.path : parentOf(node.path)) : ""}
+  <div class="menu" style="left:{menu.x}px;top:{menu.y}px" role="menu">
+    {#if node && !node.is_dir}
+      <button onclick={() => ((menu = null), app.openFile(node.path))}>Abrir</button>
+    {/if}
+    <button onclick={() => startCreate("file", dir)}>Nuevo archivo{dir ? ` en ${dir}` : ""}</button>
+    <button onclick={() => startCreate("folder", dir)}>Nueva carpeta{dir ? ` en ${dir}` : ""}</button>
+    {#if node}
+      <hr />
+      <button onclick={() => startRename(node)}>Renombrar <kbd>F2</kbd></button>
+      {#if node.name.endsWith(".tex") && node.path !== app.settings.main}
+        <button onclick={() => setMain(node)}>Usar como archivo principal</button>
+      {/if}
+      <hr />
+      <button class="danger" onclick={() => remove(node)}>Mover a la papelera <kbd>Supr</kbd></button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .tree {
@@ -127,12 +298,18 @@
     flex: 1;
   }
   .new {
-    margin: 0 8px 6px;
+    display: block;
+    width: calc(100% - 24px);
+    margin: 2px 8px 2px 10px;
+    padding: 3px 6px;
   }
   .list {
     overflow: auto;
     flex: 1;
     padding-bottom: 8px;
+  }
+  .list.drop-root {
+    background: var(--accent-soft);
   }
   .row {
     display: flex;
@@ -147,6 +324,7 @@
     color: var(--text);
     font-size: 13px;
     cursor: pointer;
+    touch-action: none;
   }
   .row:hover {
     background: var(--bg-hover);
@@ -154,6 +332,13 @@
   .row.active {
     background: var(--bg-selected);
     color: var(--text-strong);
+  }
+  .row.drop {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .row.dragged {
+    opacity: 0.5;
   }
   .ic {
     width: 14px;
@@ -181,5 +366,58 @@
     border-radius: 50%;
     background: var(--accent);
     flex: none;
+  }
+  .ghost {
+    position: fixed;
+    z-index: 60;
+    pointer-events: none;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 12px;
+    box-shadow: var(--shadow);
+  }
+  .menu {
+    position: fixed;
+    z-index: 50;
+    min-width: 210px;
+    padding: 4px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    font-size: 13px;
+  }
+  .menu button {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+  }
+  .menu button:hover {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .menu button.danger:hover {
+    background: var(--danger);
+    color: white;
+  }
+  kbd {
+    font: 11px var(--font-mono);
+    opacity: 0.6;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
+  :global(body.dragging-file) {
+    cursor: grabbing;
+    user-select: none;
   }
 </style>

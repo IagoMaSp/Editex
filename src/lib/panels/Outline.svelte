@@ -1,5 +1,17 @@
 <script lang="ts">
   import { app } from "../store.svelte";
+  import type { OutlineItem } from "../api";
+
+  /** Doble clic: además del código, muestra la sección en el PDF. */
+  async function showInPdf(item: OutlineItem) {
+    await app.openFile(item.file, item.line);
+    if (!app.ui.pdf) {
+      // El visor se monta y carga el PDF antes de poder posicionarse.
+      app.ui.pdf = true;
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    app.syncForward?.(item.line);
+  }
 </script>
 
 <div class="outline">
@@ -9,8 +21,9 @@
       <button
         class="row level-{item.level}"
         style="padding-left:{12 + item.level * 12}px"
-        title="{item.file}:{item.line}"
+        title="{item.file}:{item.line} — doble clic para verlo en el PDF"
         onclick={() => app.openFile(item.file, item.line)}
+        ondblclick={() => showInPdf(item)}
       >
         {item.title || "(sin título)"}
       </button>

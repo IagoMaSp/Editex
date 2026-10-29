@@ -23,6 +23,7 @@ import { latexLanguage, latexHighlight, closeEnvironmentOnEnter } from "./latex"
 import { compileDiagnostics, setCompileDiagnostics } from "./diagnostics";
 import { spellChecker, type SpellMenuRequest } from "./spell";
 import { editorTheme } from "./theme";
+import { pasteImages } from "./images";
 
 export interface EditorCallbacks {
   onDirty(path: string, dirty: boolean): void;
@@ -31,6 +32,7 @@ export interface EditorCallbacks {
   onCompile(full: boolean): void;
   onSyncForward(line: number): void;
   spellLang(): string;
+  saveImage(stem: string, ext: string, data: Uint8Array): Promise<string | null>;
 }
 
 const IDLE_MS = 1200;
@@ -132,6 +134,7 @@ export class EditorManager {
       editorTheme,
       compileDiagnostics,
       /\.(tex|txt|md)$/.test(path) ? spellChecker(() => this.cb.spellLang(), (req) => this.onSpellMenu?.(req)) : [],
+      /\.tex$/.test(path) ? pasteImages((stem, ext, data) => this.cb.saveImage(stem, ext, data)) : [],
       this.lsp.of(this.lspExtension(path)),
       EditorView.updateListener.of((u) => {
         if (!u.docChanged || this.current !== path) return;
@@ -209,6 +212,15 @@ export class EditorManager {
       effects: EditorView.scrollIntoView(l.from, { y: "center" }),
     });
     view.focus();
+  }
+
+  selectInLine(line: number, from: number, to: number) {
+    const view = this.view;
+    if (!view) return;
+    const l = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
+    const a = Math.min(l.from + from, l.to);
+    const b = Math.min(l.from + to, l.to);
+    view.dispatch({ selection: EditorSelection.range(a, b), effects: EditorView.scrollIntoView(a, { y: "center" }) });
   }
 
   setCompileDiagnostics(diags: Diagnostic[]) {
