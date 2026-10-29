@@ -1,0 +1,193 @@
+:root {
+  --font-ui: "Inter", "Cantarell", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "DejaVu Sans Mono", monospace;
+  --font-serif: "Latin Modern Roman", "CMU Serif", Georgia, serif;
+  --editor-font-size: 14.5px;
+
+  --bg: #f6f5f1;
+  --bg-panel: #fbfaf7;
+  --bg-sidebar: #f1efea;
+  --bg-editor: #ffffff;
+  --bg-pdf: #e7e5df;
+  --bg-hover: #e9e6df;
+  --bg-selected: #dfe9e5;
+  --border: #e0ddd5;
+  --border-strong: #c9c5bb;
+  --text: #2d2b27;
+  --text-strong: #15140f;
+  --text-muted: #6e6a61;
+  --text-faint: #a29d92;
+  --accent: #2f6f5e;
+  --accent-text: #ffffff;
+  --accent-soft: #d6e7e0;
+  --danger: #c4413a;
+  --warning: #c98a12;
+  --ok: #2f8f5e;
+  --spell: #d9534f;
+  --selection: #cfe3dc;
+  --selection-match: #e6efe9;
+  --search-match: #ffe08a;
+  --active-line: #f7f6f2;
+  --error-line: #fbe9e7;
+  --warning-line: #fdf4e0;
+  --shadow: 0 10px 30px rgb(30 25 15 / 0.12), 0 2px 6px rgb(30 25 15 / 0.08);
+  --page-shadow: 0 1px 3px rgb(0 0 0 / 0.15), 0 4px 14px rgb(0 0 0 / 0.08);
+
+  --syn-command: #2f6f5e;
+  --syn-math: #9a4dbb;
+  --syn-arg: #b0612b;
+  --syn-number: #b0612b;
+  --syn-bracket: #6e6a61;
+  --syn-comment: #9a958a;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --bg-panel: #1d1f22;
+    --bg-sidebar: #1a1c1f;
+    --bg-editor: #1f2124;
+    --bg-pdf: #141517;
+    --bg-hover: #2a2d31;
+    --bg-selected: #23383a;
+    --border: #2e3135;
+    --border-strong: #45494f;
+    --text: #d7d5cf;
+    --text-strong: #f1efe9;
+    --text-muted: #9a978f;
+    --text-faint: #66645e;
+    --accent: #5fb49a;
+    --accent-text: #0f1a16;
+    --accent-soft: #1d3530;
+    --danger: #ef6b62;
+    --warning: #e3a93a;
+    --ok: #5fb49a;
+    --spell: #ef6b62;
+    --selection: #2c4a42;
+    --selection-match: #29342f;
+    --search-match: #6b5a1c;
+    --active-line: #24272b;
+    --error-line: #3a2422;
+    --warning-line: #362d1b;
+    --shadow: 0 10px 30px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
+    --page-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+
+    --syn-command: #6cc4a8;
+    --syn-math: #c792ea;
+    --syn-arg: #e2a26b;
+    --syn-number: #e2a26b;
+    --syn-bracket: #8d8a82;
+    --syn-comment: #6d6b65;
+
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+body.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+button:hover {
+  background: var(--bg-hover);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+button.primary:hover {
+  filter: brightness(1.08);
+}
+button.icon {
+  border: none;
+  background: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.icon:hover,
+button.icon.on {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+button.ghost {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+}
+
+input,
+select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-editor);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+input:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
