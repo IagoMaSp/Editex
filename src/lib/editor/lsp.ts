@@ -2,6 +2,7 @@
 import { LSPClient, languageServerExtensions, type Transport } from "@codemirror/lsp-client";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { fileUri } from "../platform";
 
 let unlisten: (() => void) | null = null;
 
@@ -23,7 +24,7 @@ export async function startLsp(root: string): Promise<LSPClient | null> {
     unsubscribe: (h) => handlers.delete(h),
   };
   const client = new LSPClient({
-    rootUri: encodeURI(`file://${root}`),
+    rootUri: fileUri(root),
     timeout: 8000,
     extensions: languageServerExtensions(),
     initializationOptions: {},

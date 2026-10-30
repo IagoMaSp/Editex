@@ -1,4 +1,6 @@
 // Explicaciones en lenguaje claro de los errores y advertencias más comunes de LaTeX.
+import { kbd } from "./platform";
+
 
 interface Rule {
   re: RegExp;
@@ -42,8 +44,8 @@ const RULES: Rule[] = [
   { re: /Undefined color/, explain: () => "Color no definido: defínelo con \\definecolor o carga xcolor con la opción adecuada." },
   { re: /Missing \\begin\{document\}/, explain: () => "Hay texto antes de \\begin{document} o el archivo principal no es el correcto." },
   { re: /Emergency stop/, explain: () => "La compilación se detuvo por un error anterior: corrige el primer error de la lista." },
-  { re: /Citation [`'](.+?)' .*undefined/, explain: (m) => `La cita «${m[1]}» no está en el .bib, o falta una compilación completa (Ctrl+Shift+Enter).` },
-  { re: /Reference [`'](.+?)' .*undefined/, explain: (m) => `No existe \\label{${m[1]}}, o falta una compilación completa (Ctrl+Shift+Enter).` },
+  { re: /Citation [`'](.+?)' .*undefined/, explain: (m) => `La cita «${m[1]}» no está en el .bib, o falta una compilación completa (${kbd("Ctrl+Shift+Enter")}).` },
+  { re: /Reference [`'](.+?)' .*undefined/, explain: (m) => `No existe \\label{${m[1]}}, o falta una compilación completa (${kbd("Ctrl+Shift+Enter")}).` },
   { re: /There were undefined references/, explain: () => "Hay referencias sin resolver: revisa los \\ref/\\cite o haz una compilación completa." },
   { re: /Label [`'](.+?)' multiply defined/, explain: (m) => `La etiqueta «${m[1]}» está repetida: cada \\label debe ser único.` },
   { re: /Font shape .* undefined/, explain: () => "La combinación de fuente pedida no existe; se usa una parecida. Normalmente no es grave." },

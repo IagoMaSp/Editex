@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { basename, kbd } from "./lib/platform";
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { api } from "./lib/api";
@@ -9,6 +10,10 @@
   import Outline from "./lib/panels/Outline.svelte";
   import Problems from "./lib/panels/Problems.svelte";
   import Settings from "./lib/Settings.svelte";
+  import TexNotice from "./lib/TexNotice.svelte";
+  import AiPanel from "./lib/ai/AiPanel.svelte";
+  import { loadAgents } from "./lib/ai/agents";
+  import type { TexInfo } from "./lib/api";
   import SearchPanel from "./lib/panels/SearchPanel.svelte";
   import CommandPalette, { type PaletteItem } from "./lib/CommandPalette.svelte";
   import { theme } from "./lib/theme.svelte";
@@ -21,10 +26,12 @@
 
   let sidebarWidth = $state(Number(localStorage.getItem("editex.sidebar")) || 240);
   let pdfWidth = $state(Number(localStorage.getItem("editex.pdf")) || 46);
+  let aiWidth = $state(Number(localStorage.getItem("editex.aiWidth")) || 380);
   let main = $state<HTMLDivElement>();
   const ui = app.ui;
+  let texInfo = $state<TexInfo | null>(null);
 
-  const projectName = $derived(app.root?.split("/").pop() ?? "");
+  const projectName = $derived(app.root ? basename(app.root) : "");
   const errors = $derived(app.diagnostics.filter((d) => d.severity === "error").length);
   const warnings = $derived(app.diagnostics.filter((d) => d.severity === "warning").length);
 
@@ -38,7 +45,7 @@
     if (typeof zip !== "string") return;
     const parent = await open({ directory: true, title: "Carpeta donde crear el proyecto" });
     if (typeof parent !== "string") return;
-    const name = zip.split("/").pop()!.replace(/\.zip$/i, "");
+    const name = basename(zip).replace(/\.zip$/i, "");
     try {
       const root = await api.importZip(zip, `${parent}/${name}`);
       await app.openProject(root);
@@ -58,13 +65,18 @@
     );
   }
 
-  function drag(kind: "sidebar" | "pdf") {
+  function drag(kind: "sidebar" | "pdf" | "ai") {
     return (e: PointerEvent) => {
       e.preventDefault();
       const rect = main!.getBoundingClientRect();
       const move = (ev: PointerEvent) => {
         if (kind === "sidebar") sidebarWidth = Math.min(480, Math.max(160, ev.clientX - rect.left));
-        else pdfWidth = Math.min(75, Math.max(20, ((rect.right - ev.clientX) / rect.width) * 100));
+        else if (kind === "ai") aiWidth = Math.min(800, Math.max(280, rect.right - ev.clientX));
+        else {
+          // El PDF se mide sin contar el panel de IA, que está a su derecha.
+          const right = rect.right - (ui.ai ? aiWidth : 0);
+          pdfWidth = Math.min(75, Math.max(20, ((right - ev.clientX) / rect.width) * 100));
+        }
       };
       const up = () => {
         window.removeEventListener("pointermove", move);
@@ -72,6 +84,7 @@
         document.body.classList.remove("dragging");
         localStorage.setItem("editex.sidebar", String(sidebarWidth));
         localStorage.setItem("editex.pdf", String(pdfWidth));
+        localStorage.setItem("editex.aiWidth", String(aiWidth));
       };
       document.body.classList.add("dragging");
       window.addEventListener("pointermove", move);
@@ -100,17 +113,17 @@
     const langs: [SpellLang, string][] = [["es+en", "español + inglés"], ["es", "español"], ["en", "inglés"], ["off", "desactivada"]];
     const autos: [AutoCompile, string][] = [["off", "nunca"], ["save", "al guardar"], ["idle", "al dejar de escribir"]];
     return [
-      c("Compilar", () => app.compile(), "Ctrl+Enter"),
-      c("Compilación completa", () => app.compile(true), "Ctrl+Shift+Enter"),
+      c("Compilar", () => app.compile(), kbd("Ctrl+Enter")),
+      c("Compilación completa", () => app.compile(true), kbd("Ctrl+Shift+Enter")),
       c("Detener compilación", () => api.cancelCompile()),
-      c("Guardar", () => app.saveActive(), "Ctrl+S"),
+      c("Guardar", () => app.saveActive(), kbd("Ctrl+S")),
       c("Guardar todo", () => app.saveAll()),
-      c("Ir al archivo…", () => (ui.palette = "files"), "Ctrl+P"),
-      c("Buscar en el proyecto", openSearch, "Ctrl+Shift+F"),
+      c("Ir al archivo…", () => (ui.palette = "files"), kbd("Ctrl+P")),
+      c("Buscar en el proyecto", openSearch, kbd("Ctrl+Shift+F")),
       c("Ver posición actual en el PDF", () => {
         const v = app.editor.view;
         if (v) app.syncForward?.(v.state.doc.lineAt(v.state.selection.main.head).number);
-      }, "Ctrl+J"),
+      }, kbd("Ctrl+J")),
       c(`${ui.sidebar ? "Ocultar" : "Mostrar"} panel lateral`, () => (ui.sidebar = !ui.sidebar)),
       c(`${ui.pdf ? "Ocultar" : "Mostrar"} vista previa PDF`, () => (ui.pdf = !ui.pdf)),
       c(`${ui.problems ? "Ocultar" : "Mostrar"} problemas`, () => (ui.problems = !ui.problems)),
@@ -125,8 +138,12 @@
       c(`${app.settings.mathPreview ? "Desactivar" : "Activar"} vista previa de fórmulas`, () => setSetting("mathPreview", !app.settings.mathPreview)),
       c("Ir al siguiente error", () => app.nextProblem(1), "F8"),
       c("Ir al error anterior", () => app.nextProblem(-1), "Shift+F8"),
+      c(`${ui.ai ? "Cerrar" : "Abrir"} panel de IA`, () => (ui.ai = !ui.ai), kbd("Ctrl+Shift+A")),
+      c("Abrir terminal", () => app.openTerminal(), kbd("Ctrl+`")),
+      ...loadAgents().map((a) => c(`Abrir ${a.name} en la terminal`, () => app.openTerminal(a.terminalCommand))),
+      c("Arreglar errores con IA", () => app.askAi("Corrige los errores de la última compilación. Explica brevemente qué cambiaste.", true)),
       c("Ajustes del proyecto", () => (ui.settings = true)),
-      c("Abrir carpeta…", openFolder, "Ctrl+O"),
+      c("Abrir carpeta…", openFolder, kbd("Ctrl+O")),
       c("Importar ZIP de Overleaf…", importZip),
       c("Exportar proyecto como ZIP…", exportZip),
     ];
@@ -192,6 +209,7 @@
   }
 
   onMount(() => {
+    void api.checkTex().then((info) => (texInfo = info)).catch(() => {});
     void api.initialProject().then((dir) => {
       if (dir) void app.openProject(dir);
     });
@@ -216,6 +234,17 @@
     if (key === "p") {
       e.preventDefault();
       ui.palette = e.shiftKey ? "commands" : "files";
+      return;
+    }
+    if (key === "a" && e.shiftKey) {
+      e.preventDefault();
+      ui.ai = !ui.ai;
+      return;
+    }
+    if (e.key === "`" || e.code === "Backquote") {
+      e.preventDefault();
+      if (ui.problems && ui.bottomTab === "terminal") ui.problems = false;
+      else void app.openTerminal();
       return;
     }
     if (key === "f" && e.shiftKey) {
@@ -247,6 +276,7 @@
       <div class="logo">E<span>χ</span></div>
       <h1>Editex</h1>
       <p class="sub">Editor LaTeX local, rápido y sin colas de compilación.</p>
+      {#if texInfo && !texInfo.pdflatex}<div class="welcome-notice"><TexNotice info={texInfo} /></div>{/if}
       <div class="actions">
         <button class="primary" onclick={openFolder}>Abrir carpeta…</button>
         <button onclick={importZip}>Importar ZIP de Overleaf…</button>
@@ -255,7 +285,7 @@
         <h2>Recientes</h2>
         <ul>
           {#each app.recents as r (r)}
-            <li><button class="link" onclick={() => app.openProject(r)}>{r.split("/").pop()}<small>{r}</small></button></li>
+            <li><button class="link" onclick={() => app.openProject(r)}>{basename(r)}<small>{r}</small></button></li>
           {/each}
         </ul>
       {/if}
@@ -274,11 +304,11 @@
       </div>
       <div class="spacer"></div>
       <div class="compile">
-        <button class="primary run" disabled={!app.settings.main} title="Compilar (Ctrl+Enter)" onclick={() => app.compile()}>
+        <button class="primary run" disabled={!app.settings.main} title="Compilar ({kbd('Ctrl+Enter')})" onclick={() => app.compile()}>
           {#if app.compiling}<span class="spin"></span>{:else}▶{/if}
           Compilar
         </button>
-        <button class="primary full" title="Compilación completa (Ctrl+Shift+Enter)" onclick={() => app.compile(true)}>⟳</button>
+        <button class="primary full" title="Compilación completa ({kbd('Ctrl+Shift+Enter')})" onclick={() => app.compile(true)}>⟳</button>
       </div>
       {#if app.compiling}
         <button class="ghost" onclick={() => api.cancelCompile()}>Detener</button>
@@ -288,11 +318,13 @@
         ⚠{#if errors}<span class="count">{errors}</span>{/if}
       </button>
       <button class="icon" class:on={ui.pdf} title="Vista previa PDF" onclick={() => (ui.pdf = !ui.pdf)}>▤</button>
+      <button class="ai-btn" class:on={ui.ai} title="Asistente de IA: Claude Code, Codex… ({kbd('Ctrl+Shift+A')})" onclick={() => (ui.ai = !ui.ai)}>✦ IA</button>
       <button class="icon" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
       <button class="icon" class:on={ui.settings} title="Ajustes" onclick={() => (ui.settings = !ui.settings)}>⚙</button>
     </header>
 
     {#if ui.settings}<Settings onclose={() => (ui.settings = false)} />{/if}
+    {#if texInfo}<TexNotice info={texInfo} />{/if}
 
     <div class="main" bind:this={main}>
       {#if ui.sidebar}
@@ -300,7 +332,7 @@
           <div class="seg">
             <button class:sel={ui.sideTab === "files"} onclick={() => (ui.sideTab = "files")}>Archivos</button>
             <button class:sel={ui.sideTab === "outline"} onclick={() => (ui.sideTab = "outline")}>Esquema</button>
-            <button class:sel={ui.sideTab === "search"} title="Ctrl+Shift+F" onclick={() => (ui.sideTab = "search")}>Buscar</button>
+            <button class:sel={ui.sideTab === "search"} title={kbd("Ctrl+Shift+F")} onclick={() => (ui.sideTab = "search")}>Buscar</button>
           </div>
           {#if ui.sideTab === "files"}<FileTree />{:else if ui.sideTab === "outline"}<Outline />{:else}<SearchPanel />{/if}
         </aside>
@@ -309,14 +341,19 @@
       {/if}
       <section class="center">
         <div class="editor"><Editor /></div>
-        {#if ui.problems}
-          <div class="problems"><Problems onclose={() => (ui.problems = false)} /></div>
+        {#if ui.problems || ui.terminalStarted}
+          <div class="problems" class:closed={!ui.problems}><Problems onclose={() => (ui.problems = false)} /></div>
         {/if}
       </section>
       {#if ui.pdf}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="split" onpointerdown={drag("pdf")}></div>
         <section class="pdf" style="width:{pdfWidth}%"><PdfViewer /></section>
+      {/if}
+      {#if ui.ai}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="split" onpointerdown={drag("ai")}></div>
+        <section class="aipanel" style="width:{aiWidth}px"><AiPanel onclose={() => (ui.ai = false)} /></section>
       {/if}
     </div>
 
@@ -332,7 +369,7 @@
         <span>{app.lastResult.mode} · {(app.lastResult.durationMs / 1000).toFixed(2)} s</span>
       {/if}
       <div class="spacer"></div>
-      <span>Ctrl+Shift+P comandos · Ctrl+P archivos · Ctrl+Clic en PDF → código · Ctrl+J → PDF</span>
+      <span>{kbd("Ctrl+Shift+P")} comandos · {kbd("Ctrl+P")} archivos · {kbd("Ctrl+Clic")} en PDF → código · {kbd("Ctrl+J")} → PDF</span>
     </footer>
   </div>
 {/if}
@@ -391,6 +428,11 @@
   .sub {
     margin: 0 0 22px;
     color: var(--text-muted);
+  }
+  .welcome-notice {
+    margin: -8px 0 18px;
+    border-radius: 8px;
+    overflow: hidden;
   }
   .actions {
     display: flex;
@@ -509,13 +551,15 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    overflow: hidden;
   }
   aside {
-    flex: none;
+    /* En ventanas estrechas los paneles laterales ceden espacio antes que el editor. */
+    flex: 0 1 auto;
+    min-width: 150px;
     display: flex;
     flex-direction: column;
     background: var(--bg-sidebar);
-    min-width: 0;
   }
   .seg {
     display: flex;
@@ -550,8 +594,8 @@
     background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
   }
   .center {
-    flex: 1;
-    min-width: 0;
+    flex: 1 0 0;
+    min-width: 260px;
     display: flex;
     flex-direction: column;
   }
@@ -567,9 +611,31 @@
     min-height: 120px;
     border-top: 1px solid var(--border);
   }
+  .aipanel {
+    flex: 0 1 auto;
+    min-width: 260px;
+  }
+  .ai-btn {
+    border: 1px solid var(--accent);
+    background: none;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin: 0 4px;
+  }
+  .ai-btn:hover,
+  .ai-btn.on {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .problems.closed {
+    display: none;
+  }
   .pdf {
-    flex: none;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 180px;
   }
 
   footer {

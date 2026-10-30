@@ -1,9 +1,12 @@
 <script lang="ts">
   import { app } from "../store.svelte";
   import { explain } from "../errors";
+  import TerminalView from "../ai/TerminalView.svelte";
+  import { loadAgents } from "../ai/agents";
 
   let { onclose }: { onclose: () => void } = $props();
-  let tab = $state<"problems" | "log">("problems");
+  const ui = app.ui;
+  const agents = loadAgents();
   let showInfo = $state(false);
 
   const list = $derived(app.diagnostics.filter((d) => showInfo || d.severity !== "info"));
@@ -20,19 +23,33 @@
 
 <div class="panel">
   <div class="tabs">
-    <button class:sel={tab === "problems"} onclick={() => (tab = "problems")}>
+    <button class:sel={ui.bottomTab === "problems"} onclick={() => (ui.bottomTab = "problems")}>
       Problemas <span class="badge err">{counts.error}</span><span class="badge warn">{counts.warning}</span>
     </button>
-    <button class:sel={tab === "log"} onclick={() => (tab = "log")}>Salida</button>
+    <button class:sel={ui.bottomTab === "log"} onclick={() => (ui.bottomTab = "log")}>Salida</button>
+    <button class:sel={ui.bottomTab === "terminal"} onclick={() => app.openTerminal()}>Terminal</button>
     <div class="spacer"></div>
-    {#if tab === "problems"}
+    {#if ui.bottomTab === "terminal"}
+      {#each agents as a (a.id)}
+        <button class="launch" title="Ejecuta «{a.terminalCommand}» en la terminal" onclick={() => app.terminal?.run(a.terminalCommand)}>
+          ▸ {a.name}
+        </button>
+      {/each}
+      <button class="icon" title="Reiniciar terminal" onclick={() => app.terminal?.restart()}>⟳</button>
+    {/if}
+    {#if ui.bottomTab === "problems" && counts.error}
+      <button class="launch" title="Pide al agente de IA que corrija los errores" onclick={() => app.askAi("Corrige los errores de la última compilación. Explica brevemente qué cambiaste.", true)}>
+        ✦ Arreglar con IA
+      </button>
+    {/if}
+    {#if ui.bottomTab === "problems"}
       <span class="hint">F8 / Shift+F8 para recorrerlos</span>
       <label><input type="checkbox" bind:checked={showInfo} /> Cajas over/underfull ({counts.info})</label>
     {/if}
     <button class="icon" title="Cerrar" onclick={onclose}>✕</button>
   </div>
-  <div class="body">
-    {#if tab === "problems"}
+  <div class="body" class:hidden={ui.bottomTab === "terminal"}>
+    {#if ui.bottomTab === "problems"}
       {#each list as d, i (i)}
         <button class="item {d.severity}" onclick={() => open(d.file, d.line)}>
           <span class="sev">{d.severity === "error" ? "●" : d.severity === "warning" ? "▲" : "○"}</span>
@@ -49,6 +66,14 @@
       <pre>{app.lastResult?.output || "Sin salida"}</pre>
     {/if}
   </div>
+  <!-- La terminal sigue viva aunque se cambie de pestaña o se cierre el panel. -->
+  {#if ui.terminalStarted && app.root}
+    <div class="term" class:hidden={ui.bottomTab !== "terminal"}>
+      {#key app.root}
+        <TerminalView cwd={app.root} visible={ui.problems && ui.bottomTab === "terminal"} />
+      {/key}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -106,6 +131,25 @@
   }
   .badge.warn {
     background: var(--warning);
+  }
+  .hidden {
+    display: none !important;
+  }
+  .term {
+    flex: 1;
+    min-height: 0;
+  }
+  .launch {
+    border: none;
+    background: var(--bg-hover);
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    margin-right: 2px;
+  }
+  .launch:hover {
+    background: var(--accent);
+    color: var(--accent-text);
   }
   .body {
     flex: 1;
