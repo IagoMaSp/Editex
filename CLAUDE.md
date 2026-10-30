@@ -12,6 +12,7 @@ pnpm dev  →  http://localhost:1420/?mock   # interfaz en el navegador con back
 pnpm check                           # svelte-check (TS + Svelte)
 pnpm build                           # build del frontend (vite)
 cd src-tauri && cargo test           # tests unitarios Rust
+scripts/install-linux.sh             # build release + instalar en ~/.local (lanzador incluido); --uninstall para quitar
 cd src-tauri && EDITEX_BENCH=/tmp/copia-de-examples-tesis cargo test bench -- --ignored --nocapture
 ```
 
