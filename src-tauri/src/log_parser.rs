@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde::Serialize;
 
-use crate::project::to_rel;
+use crate::platform::rel_from_reported;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Diagnostic {
@@ -35,15 +35,7 @@ pub fn parse_log(log: &str, root: &Path) -> Vec<Diagnostic> {
     let mut out: Vec<Diagnostic> = Vec::new();
 
     let current = |stack: &[Option<String>]| stack.iter().rev().find_map(|f| f.clone());
-    let normalize = |file: &str| -> String {
-        let trimmed = file.trim_start_matches("./");
-        let p = Path::new(trimmed);
-        if p.is_absolute() {
-            to_rel(root, p).unwrap_or_else(|| trimmed.to_string())
-        } else {
-            trimmed.to_string()
-        }
-    };
+    let normalize = |file: &str| -> String { rel_from_reported(root, file).unwrap_or_else(|| file.trim().to_string()) };
 
     let mut i = 0;
     while i < lines.len() {

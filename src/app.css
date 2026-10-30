@@ -1,6 +1,6 @@
 :root {
-  --font-ui: "Inter", "Cantarell", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "DejaVu Sans Mono", monospace;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", "Cantarell", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --font-serif: "Latin Modern Roman", "CMU Serif", Georgia, serif;
   --editor-font-size: 14.5px;
 

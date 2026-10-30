@@ -26,10 +26,20 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "homepage": "https://github.com/IagoMaSp/Editex",
-    "longDescription": "Editor LaTeX de escritorio, local y rápido: compilación con latexmk, visor PDF con SyncTeX, autocompletado con texlab y corrector ortográfico.",
     "category": "Productivity",
     "shortDescription": "Editor LaTeX de escritorio",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "dictionaries/": "dictionaries/"
+    },
+    "publisher": "Iago",
+    "copyright": "© 2026 Iago",
+    "longDescription": "Editor LaTeX de escritorio: compilación local rápida, vista previa PDF con SyncTeX, autocompletado, ortografía y vista previa de fórmulas."
   }
 }

@@ -3,7 +3,7 @@
 **Editor LaTeX de escritorio, local y rápido.** Una alternativa a Overleaf que funciona sin conexión, con tus archivos en tu disco y compilando con la instalación de TeX de tu sistema.
 
 [![Última versión](https://img.shields.io/github/v/release/IagoMaSp/Editex?label=descargar)](https://github.com/IagoMaSp/Editex/releases/latest)
-[![CI](https://github.com/IagoMaSp/Editex/actions/workflows/ci.yml/badge.svg)](https://github.com/IagoMaSp/Editex/actions/workflows/ci.yml)
+[![Build](https://github.com/IagoMaSp/Editex/actions/workflows/build.yml/badge.svg)](https://github.com/IagoMaSp/Editex/actions/workflows/build.yml)
 
 Hecho con Tauri 2 (Rust) + Svelte 5 + CodeMirror 6 + pdf.js.
 
@@ -18,21 +18,23 @@ Hecho con Tauri 2 (Rust) + Svelte 5 + CodeMirror 6 + pdf.js.
 - **Visor PDF** integrado: zoom, modo oscuro, texto seleccionable y SyncTeX (Ctrl+clic en el PDF → código, Ctrl+J → PDF).
 - **Proyecto**: árbol de archivos editable, esquema del documento, buscar y reemplazar en todo el proyecto, pegar imágenes directamente, importar/exportar ZIP de Overleaf.
 - **Paleta de comandos** (Ctrl+Shift+P) y apertura rápida de archivos y secciones (Ctrl+P).
+- **Asistente de IA**: chat con Claude Code o Codex sobre tu proyecto y terminal integrada (ver [más abajo](#asistente-de-ia)).
 - Tema claro, oscuro o el del sistema.
 
 ## Instalación
 
 Editex es el editor; para compilar necesita una **distribución de TeX** instalada en el sistema (igual que cualquier editor LaTeX local). Los pasos son siempre dos:
 
-1. Instalar TeX (y opcionalmente texlab y los diccionarios).
+1. Instalar TeX.
 2. Descargar el instalador de Editex de la [página de la última versión](https://github.com/IagoMaSp/Editex/releases/latest).
 
 | Componente | ¿Para qué? | ¿Obligatorio? |
 |---|---|---|
 | TeX Live / MiKTeX / MacTeX (con `latexmk`) | Compilar | Sí |
 | `biber` | Bibliografía con biblatex | Si usas biblatex |
-| `texlab` | Autocompletado y diagnósticos | Recomendado |
-| Diccionarios Hunspell (`es_ES`, `en_US`) | Ortografía | Opcional |
+| `texlab` | Autocompletado y diagnósticos | Incluido en Windows y macOS; en Linux, recomendado |
+
+Los diccionarios de español e inglés para la ortografía vienen incluidos en todos los sistemas.
 
 ### Linux
 
@@ -42,7 +44,7 @@ Editex es el editor; para compilar necesita una **distribución de TeX** instala
 <summary>Arch / CachyOS / Manjaro</summary>
 
 ```bash
-sudo pacman -S --needed texlive texlive-lang biber texlab hunspell-es_es hunspell-en_us
+sudo pacman -S --needed texlive texlive-lang biber texlab
 ```
 </details>
 
@@ -50,7 +52,7 @@ sudo pacman -S --needed texlive texlive-lang biber texlab hunspell-es_es hunspel
 <summary>Debian / Ubuntu / Linux Mint</summary>
 
 ```bash
-sudo apt install texlive-latex-extra texlive-lang-spanish texlive-bibtex-extra biber latexmk hunspell-es hunspell-en-us
+sudo apt install texlive-latex-extra texlive-lang-spanish texlive-bibtex-extra biber latexmk
 ```
 
 texlab no está en los repositorios de todas las versiones: descarga `texlab-x86_64-linux.tar.gz` de sus [releases](https://github.com/latex-lsp/texlab/releases/latest) y copia el binario a `~/.local/bin/`.
@@ -60,7 +62,7 @@ texlab no está en los repositorios de todas las versiones: descarga `texlab-x86
 <summary>Fedora</summary>
 
 ```bash
-sudo dnf install texlive-scheme-medium latexmk biber hunspell-es hunspell-en-US
+sudo dnf install texlive-scheme-medium latexmk biber
 ```
 
 texlab: igual que en Debian, desde sus [releases](https://github.com/latex-lsp/texlab/releases/latest).
@@ -82,13 +84,11 @@ texlab: igual que en Debian, desde sus [releases](https://github.com/latex-lsp/t
 **1. TeX.** Instala una de estas dos (desde PowerShell o con su instalador gráfico):
 
 - **TeX Live** (recomendado, incluye `latexmk`, `biber` y Perl): [instalador oficial](https://tug.org/texlive/windows.html) (`install-tl-windows.exe`).
-- **MiKTeX** (más ligero, instala paquetes bajo demanda). `latexmk` necesita Perl:
+- **MiKTeX** (más ligero, instala paquetes bajo demanda; en su consola activa *Instalar paquetes que falten → Siempre*). `latexmk` necesita Perl:
   ```powershell
   winget install MiKTeX.MiKTeX
   winget install StrawberryPerl.StrawberryPerl
   ```
-
-**texlab** (recomendado): descarga `texlab-x86_64-windows.zip` de sus [releases](https://github.com/latex-lsp/texlab/releases/latest) y coloca `texlab.exe` en una carpeta del `PATH`.
 
 **2. Editex.** Descarga y ejecuta `Editex_*_x64-setup.exe` (o el `.msi`).
 
@@ -100,27 +100,18 @@ texlab: igual que en Debian, desde sus [releases](https://github.com/latex-lsp/t
 
 ```bash
 brew install --cask mactex-no-gui   # o descarga MacTeX desde https://tug.org/mactex/
-brew install texlab
 ```
 
 **2. Editex.** Descarga el `.dmg` para tu Mac — `aarch64` para Apple Silicon (M1 o posterior), `x64` para Intel — y arrastra Editex a *Aplicaciones*.
 
-> La app no está firmada con un certificado de Apple, así que la primera vez macOS dirá que «está dañada» o que «no se puede abrir». Ejecuta una vez:
+> La app no está firmada con un certificado de Apple. La primera vez, clic derecho sobre Editex → *Abrir*. Si macOS dice que «está dañada», ejecuta una vez:
 > ```bash
-> xattr -dr com.apple.quarantine /Applications/Editex.app
+> xattr -cr /Applications/Editex.app
 > ```
 
-### Ortografía en Windows y macOS
+### Versiones en desarrollo
 
-Editex busca diccionarios Hunspell (`es_ES.dic`/`.aff`, `en_US.dic`/`.aff`) en las carpetas del sistema y en la carpeta `dictionaries` de su configuración:
-
-| Sistema | Carpeta |
-|---|---|
-| Linux | `~/.config/dev.iagomasp.editex/dictionaries/` |
-| Windows | `%APPDATA%\dev.iagomasp.editex\dictionaries\` |
-| macOS | `~/Library/Application Support/dev.iagomasp.editex/dictionaries/` |
-
-Puedes descargarlos del [repositorio de diccionarios de LibreOffice](https://github.com/LibreOffice/dictionaries) (carpetas `es` y `en`).
+Para probar lo último de `main` sin esperar a una versión: **Actions → Build →** el run más reciente **→ Artifacts**.
 
 ## Uso
 
@@ -128,7 +119,20 @@ Abre una carpeta con tu proyecto LaTeX (o importa un ZIP de Overleaf). Editex de
 
 En Linux también puedes abrir un proyecto desde la terminal: `editex ~/ruta/al/proyecto`.
 
-### Atajos
+## Asistente de IA
+
+Editex se integra con agentes de IA que trabajan sobre los archivos del proyecto, usando **tu propia cuenta** (la misma sesión que en la terminal):
+
+- **Panel de IA** (✦ o Ctrl+Shift+A): chat con Claude Code o Codex mediante el [Agent Client Protocol](https://agentclientprotocol.com). Muestra el razonamiento, el plan, cada archivo que lee y los cambios como diff; pide permiso antes de editar. Los cambios en archivos abiertos se aplican en el editor y **Ctrl+Z los deshace**. Puedes adjuntar el archivo actual, la selección y los errores de compilación. En *Problemas* hay un botón **Arreglar con IA**.
+- **Terminal integrada** (Ctrl+`): una terminal real en la carpeta del proyecto, con botones para lanzar `claude` o `codex` directamente.
+
+Requisitos: [Node.js](https://nodejs.org) (el adaptador ACP se descarga con `npx` la primera vez) y haber iniciado sesión en el agente (`claude` → `/login`, o `codex login`). Con ⚙ en el panel se pueden añadir otros agentes compatibles con ACP (p. ej. Gemini CLI).
+
+Si un agente modifica en disco un archivo que tienes abierto con cambios sin guardar, Editex avisa y te deja elegir qué versión conservar.
+
+## Atajos
+
+En macOS, Ctrl es ⌘.
 
 | Atajo | Acción |
 |---|---|
@@ -139,8 +143,10 @@ En Linux también puedes abrir un proyecto desde la terminal: `editex ~/ruta/al/
 | Ctrl+P | Abrir archivo o sección |
 | Ctrl+J | Ir a la posición en el PDF |
 | Ctrl+clic en PDF | Ir a la línea en el código |
+| Ctrl+Shift+A | Panel de IA |
+| Ctrl+` | Terminal integrada |
 
-### Caché de figuras TikZ
+## Caché de figuras TikZ
 
 Añade `\usepackage{memoize}` antes de `tikz` y activa *shell-escape* en ajustes. Requiere el módulo Perl `PDF::API2` (`perl-pdf-api2` en Arch).
 
@@ -158,11 +164,13 @@ cd src-tauri && cargo test           # tests de Rust
 pnpm tauri build                     # instaladores del sistema actual
 ```
 
+En Windows y macOS, antes de `pnpm tauri build` hay que descargar texlab, que va incluido en la app: `scripts/fetch-texlab.sh`.
+
 Para instalar tu propia compilación en Linux sin empaquetar: `scripts/install-linux.sh` (binario en `~/.local/bin` y lanzador en el menú; `--uninstall` para quitarlo).
 
 ### Publicar una versión
 
-Las versiones se publican automáticamente con GitHub Actions ([`release.yml`](.github/workflows/release.yml)):
+Las versiones se publican automáticamente con GitHub Actions ([`build.yml`](.github/workflows/build.yml)):
 
 1. `scripts/bump-version.sh 0.2.0` — actualiza la versión en `package.json`, `tauri.conf.json` y `Cargo.toml`.
 2. Commit en una rama, pull request y merge a `main`.

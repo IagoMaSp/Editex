@@ -1,6 +1,7 @@
 // Backend simulado para probar la interfaz en un navegador normal (`pnpm dev` y abrir `/?mock`).
 // Usa examples/tesis como proyecto; solo existe en desarrollo.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { killMockAgent, sendToMockAgent, spawnMockAgent } from "./mock-agent";
 
 const ROOT = "/mock/tesis";
 const files = new Map<string, string | null>(); // ruta -> contenido (null = sin cargar)
@@ -112,6 +113,16 @@ mockIPC(
       case "save_binary":
         files.set("figuras/imagen-pegada.png", "");
         return "figuras/imagen-pegada.png";
+      case "acp_spawn":
+        return spawnMockAgent({ ...args, cwd: ROOT });
+      case "acp_send":
+        sendToMockAgent(args.id, args.line);
+        return;
+      case "acp_kill":
+        killMockAgent(args.id);
+        return;
+      case "check_tex":
+        return { os: "linux", distribution: "TeX Live", pdflatex: true, xelatex: true, lualatex: true, latexmk: true, biber: true, synctex: true };
       case "spell_check":
         return [];
       case "lsp_start":

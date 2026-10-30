@@ -4,3 +4,4 @@ src-tauri/target/
 src-tauri/gen/
 .editex/
 *.editex-tmp
+src-tauri/binaries/texlab-*

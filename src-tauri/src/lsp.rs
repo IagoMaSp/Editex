@@ -8,10 +8,22 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::Mutex;
 
+use crate::platform;
+
 #[derive(Default)]
 pub struct LspState {
     stdin: Mutex<Option<ChildStdin>>,
     child: Mutex<Option<Child>>,
+}
+
+/// texlab incluido junto al ejecutable (Windows/macOS) o, si no, el del sistema.
+fn texlab_path() -> Option<std::path::PathBuf> {
+    let name = if cfg!(windows) { "texlab.exe" } else { "texlab" };
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
+        .filter(|p| p.is_file())
+        .or_else(|| platform::find_program("texlab"))
 }
 
 #[tauri::command]
@@ -19,7 +31,7 @@ pub async fn lsp_start(app: AppHandle, state: State<'_, LspState>, root: String)
     if let Some(mut old) = state.child.lock().await.take() {
         let _ = old.kill().await;
     }
-    let mut child = crate::command("texlab")
+    let mut child = platform::command(texlab_path().ok_or("No se encontró texlab")?)
         .current_dir(&root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

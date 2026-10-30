@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { api, type FileMatches, type SearchOptions } from "../api";
   import { app } from "../store.svelte";
+  import { basename } from "../platform";
 
   let query = $state("");
   let replacement = $state("");
@@ -118,7 +119,7 @@
       <div class="file">
         <button class="fname" onclick={() => (collapsed[f.file] = !collapsed[f.file])}>
           <span class="chev">{collapsed[f.file] ? "▸" : "▾"}</span>
-          <span class="name">{f.file.split("/").pop()}</span>
+          <span class="name">{basename(f.file)}</span>
           <span class="dir">{f.file.includes("/") ? f.file.slice(0, f.file.lastIndexOf("/")) : ""}</span>
           <span class="n">{f.matches.length}</span>
         </button>

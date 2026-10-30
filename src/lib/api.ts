@@ -75,11 +75,23 @@ export interface FileMatches {
   matches: SearchMatch[];
 }
 
+export interface TexInfo {
+  os: "linux" | "macos" | "windows";
+  distribution: string;
+  pdflatex: boolean;
+  xelatex: boolean;
+  lualatex: boolean;
+  latexmk: boolean;
+  biber: boolean;
+  synctex: boolean;
+}
+
 export type Engine = "pdflatex" | "xelatex" | "lualatex";
 export type SpellLang = "es" | "en" | "es+en" | "off";
 export type AutoCompile = "off" | "save" | "idle";
 
 export const api = {
+  checkTex: () => invoke<TexInfo>("check_tex"),
   initialProject: () => invoke<string | null>("initial_project"),
   listFiles: (root: string) => invoke<FileNode[]>("list_files", { root }),
   detectMain: (root: string) => invoke<string | null>("detect_main", { root }),

@@ -5,6 +5,7 @@
   import { onMount, tick } from "svelte";
   import { api } from "../api";
   import { app } from "../store.svelte";
+  import { kbd } from "../platform";
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -233,7 +234,7 @@
     {#if error}
       <p class="empty">No se pudo abrir el PDF: {error}</p>
     {:else if pages.length === 0}
-      <p class="empty">{app.compiling ? "Compilando…" : "Compila (Ctrl+Enter) para ver el PDF"}</p>
+      <p class="empty">{app.compiling ? "Compilando…" : `Compila (${kbd("Ctrl+Enter")}) para ver el PDF`}</p>
     {/if}
     {#each pages as p, i (i)}
       <!-- svelte-ignore a11y_click_events_have_key_events -->

@@ -23,6 +23,7 @@ import { latexLanguage, latexHighlight, closeEnvironmentOnEnter } from "./latex"
 import { compileDiagnostics, setCompileDiagnostics } from "./diagnostics";
 import { spellChecker, type SpellMenuRequest } from "./spell";
 import { editorTheme } from "./theme";
+import { fileUri } from "../platform";
 import { pasteImages } from "./images";
 import { mathPreview } from "./math";
 import { expandSnippet, snippetSource, type SnippetDef } from "./snippets";
@@ -75,7 +76,7 @@ export class EditorManager {
   }
 
   private uri(path: string) {
-    return encodeURI(`file://${this.root}/${path}`);
+    return fileUri(`${this.root}/${path}`);
   }
 
   private lspExtension(path: string): Extension {
@@ -201,15 +202,41 @@ export class EditorManager {
     this.cb.onDirty(path, false);
   }
 
-  reloadIfChanged(path: string, text: string) {
+  /** Cambio mínimo (prefijo/sufijo comunes) para que el cursor y el scroll no salten. */
+  private minimalChange(old: string, text: string) {
+    let start = 0;
+    while (start < old.length && start < text.length && old[start] === text[start]) start++;
+    let endOld = old.length;
+    let endNew = text.length;
+    while (endOld > start && endNew > start && old[endOld - 1] === text[endNew - 1]) {
+      endOld--;
+      endNew--;
+    }
+    return { from: start, to: endOld, insert: text.slice(start, endNew) };
+  }
+
+  /** Sustituye el contenido de un archivo abierto. Devuelve false si no había cambios. */
+  private replaceContent(path: string, text: string, userEvent: string): boolean {
     const state = this.stateOf(path);
-    if (!state || state.doc.toString() === text) return;
-    const tr = { changes: { from: 0, to: state.doc.length, insert: text } };
-    if (path === this.current && this.view) {
-      this.view.dispatch(tr);
-      this.markSaved(path);
-    } else {
-      this.states.set(path, state.update(tr).state);
+    if (!state) return false;
+    const old = state.doc.toString();
+    if (old === text) return false;
+    const tr = { changes: this.minimalChange(old, text), userEvent };
+    if (path === this.current && this.view) this.view.dispatch(tr);
+    else this.states.set(path, state.update(tr).state);
+    return true;
+  }
+
+  /** Recarga desde disco un archivo sin cambios locales. */
+  reloadIfChanged(path: string, text: string) {
+    if (this.replaceContent(path, text, "reload")) this.markSaved(path);
+  }
+
+  /** Cambio hecho por un agente de IA: queda en el historial (Ctrl+Z lo deshace). */
+  applyExternalEdit(path: string, text: string) {
+    if (this.replaceContent(path, text, "input.agent") && !this.dirty.has(path)) {
+      this.dirty.add(path);
+      this.cb.onDirty(path, true);
     }
   }
 

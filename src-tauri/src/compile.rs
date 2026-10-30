@@ -12,10 +12,10 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::State;
-
 use tokio::sync::oneshot;
 
 use crate::log_parser::{parse_log, Diagnostic};
+use crate::platform::{self, PATH_LIST_SEP};
 use crate::project::{resolve_tex_ref, strip_comment};
 
 pub const BUILD_DIR: &str = ".editex/build";
@@ -52,13 +52,6 @@ pub struct CompileResult {
     /// Descripción del modo usado, p. ej. "rápido: cap2" o "completo".
     mode: String,
     output: String,
-}
-
-fn which(bin: &str) -> bool {
-    let exe = format!("{bin}{}", std::env::consts::EXE_SUFFIX);
-    std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|p| p.join(&exe).is_file()))
-        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -134,6 +127,10 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
     if req.shell_escape {
         engine_cmd.push("-shell-escape".into());
     }
+    // MiKTeX ignora la variable max_print_line; sin esto las rutas del log se cortan.
+    if platform::tex_info().distribution == "MiKTeX" {
+        engine_cmd.push("-max-print-line=100000".into());
+    }
 
     // latexmk no detecta cambios en el código pretex ni en el formato.
     let pretex_changed = state
@@ -143,8 +140,8 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
         .insert(format!("{}\0{build_rel}", req.root), format!("{pretex}\0{fmt:?}"))
         .is_some_and(|prev| prev != format!("{pretex}\0{fmt:?}"));
 
-    let mut cmd = if which("latexmk") {
-        let mut c = crate::command("latexmk");
+    let mut cmd = if let Some(latexmk) = platform::find_program("latexmk") {
+        let mut c = platform::command(latexmk);
         let flag = match engine.as_str() {
             "xelatex" => "-xelatex",
             "lualatex" => "-lualatex",
@@ -162,7 +159,7 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
         c
     } else {
         // Sin latexmk: una pasada del motor (suficiente para la vista previa).
-        let mut c = crate::command(&engine_cmd[0]);
+        let mut c = platform::command(&engine_cmd[0]);
         c.args(&engine_cmd[1..])
             .args(["-synctex=1", "-interaction=nonstopmode", "-file-line-error"])
             .arg(format!("-output-directory={build_rel}"))
@@ -179,12 +176,10 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     if fmt.is_some() {
-        // Separador final = añadir las rutas por defecto de kpathsea (';' en Windows).
-        let sep = if cfg!(windows) { ';' } else { ':' };
-        cmd.env("TEXFORMATS", format!("{}{sep}", full_dir.display()));
+        // ':' final = añadir las rutas por defecto de kpathsea.
+        cmd.env("TEXFORMATS", format!("{}{PATH_LIST_SEP}", full_dir.display()));
     }
-    #[cfg(unix)]
-    cmd.process_group(0);
+    platform::new_process_group(&mut cmd);
 
     let child = cmd.spawn().map_err(|e| format!("No se pudo ejecutar {}: {e}", engine))?;
     let pid = child.id();
@@ -194,7 +189,7 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
     let output = tokio::select! {
         out = &mut output_fut => out.map_err(|e| e.to_string())?,
         _ = rx => {
-            kill_group(pid);
+            platform::kill_tree(pid);
             return Ok(CompileResult {
                 status: "cancelled",
                 pdf: None,
@@ -275,18 +270,6 @@ fn mirror_dirs(root: &Path, outdir: &Path) {
     }
 }
 
-/// Mata latexmk y los procesos hijos (motor, biber...) de su grupo.
-fn kill_group(pid: Option<u32>) {
-    #[cfg(unix)]
-    if let Some(pid) = pid {
-        unsafe {
-            libc::kill(-(pid as i32), libc::SIGTERM);
-        }
-    }
-    #[cfg(not(unix))]
-    let _ = pid;
-}
-
 /// Nombre (tal como aparece en `\include{...}`) del capítulo que contiene `active`.
 pub fn include_ancestor(root: &Path, main: &str, active: &str) -> Option<String> {
     let re = Regex::new(r"\\(input|include|subfile)\s*\{([^}]+)\}").unwrap();
@@ -344,7 +327,7 @@ async fn ensure_format(root: &Path, main: &str, outdir: &Path, engine: &str) -> 
         return Ok(false);
     }
 
-    let out = crate::command(engine)
+    let out = platform::command(engine)
         .current_dir(root)
         .args(["-ini", "-interaction=nonstopmode"])
         .arg(format!("-jobname={FMT_NAME}"))
