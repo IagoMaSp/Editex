@@ -2,7 +2,23 @@
 
 Editor LaTeX de escritorio, local y rápido. Tauri 2 (Rust) + Svelte 5 + CodeMirror 6 + pdf.js.
 
-## Requisitos (Arch / CachyOS)
+## Windows y macOS
+
+1. Instala LaTeX:
+   - **Windows**: [MiKTeX](https://miktex.org/download) (en su consola, activa *Instalar paquetes que falten → Siempre*) o [TeX Live](https://tug.org/texlive/windows.html). Para `latexmk` con MiKTeX hace falta Perl ([Strawberry Perl](https://strawberryperl.com/)); TeX Live ya lo incluye.
+   - **macOS**: [MacTeX](https://tug.org/mactex/) o `brew install --cask mactex-no-gui`.
+2. Descarga el instalador de Editex:
+   - Versiones publicadas: pestaña **Releases** del repositorio (`.msi`/`-setup.exe` para Windows, `.dmg` para macOS: `aarch64` = Apple Silicon, `x64` = Intel).
+   - Última compilación de una rama: **Actions → Build →** el run más reciente **→ Artifacts**.
+3. La app no está firmada, así que la primera vez:
+   - **Windows**: en el aviso de SmartScreen, *Más información → Ejecutar de todas formas*.
+   - **macOS**: clic derecho sobre Editex → *Abrir*; si dice que está dañada: `xattr -cr /Applications/Editex.app`.
+
+texlab (autocompletado) y los diccionarios de español e inglés vienen incluidos.
+
+Para publicar una versión: `git tag v0.2.0 && git push origin v0.2.0` crea un release en borrador con los instaladores de los tres sistemas.
+
+## Requisitos para desarrollar (Arch / CachyOS)
 
 ```bash
 sudo pacman -S --needed texlive texlive-lang biber texlab webkit2gtk-4.1 hunspell-es_es hunspell-en_us

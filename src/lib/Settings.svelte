@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { kbd } from "./platform";
   import { app } from "./store.svelte";
   import type { FileNode } from "./api";
   import { recheckSpelling } from "./editor/spell";
@@ -36,7 +37,7 @@
     Compilar automáticamente
     <select bind:value={app.settings.autoCompile} onchange={() => changed()}>
       <option value="off">Nunca</option>
-      <option value="save">Al guardar (Ctrl+S)</option>
+      <option value="save">Al guardar ({kbd("Ctrl+S")})</option>
       <option value="idle">Al dejar de escribir</option>
     </select>
   </label>

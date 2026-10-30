@@ -1,4 +1,5 @@
 // Estado global de la app y acciones de alto nivel (proyecto, archivos, compilación).
+import { kbd } from "./platform";
 import { listen } from "@tauri-apps/api/event";
 import { api, type AutoCompile, type CompileResult, type Diagnostic, type Engine, type FileNode, type OutlineItem, type SpellLang } from "./api";
 import { EditorManager } from "./editor/manager";
@@ -227,7 +228,7 @@ class AppState {
   async nextProblem(dir: 1 | -1) {
     const list = this.diagnostics.filter((d) => d.file && !d.file.startsWith("/") && d.line && d.severity !== "info");
     if (!list.length) {
-      this.notify(this.lastResult ? "No hay errores ni advertencias" : "Compila primero (Ctrl+Enter)");
+      this.notify(this.lastResult ? "No hay errores ni advertencias" : `Compila primero (${kbd("Ctrl+Enter")})`);
       return;
     }
     // Errores primero, luego advertencias; dentro de cada grupo, en orden de aparición.

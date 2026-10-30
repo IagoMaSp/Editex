@@ -1,5 +1,6 @@
 mod compile;
 mod log_parser;
+mod platform;
 mod lsp;
 mod project;
 mod search;
@@ -8,8 +9,11 @@ mod synctex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Antes de crear hilos: las apps lanzadas desde el menú/Finder no heredan el PATH de la terminal.
+    platform::augment_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(compile::CompileState::default())
         .manage(lsp::LspState::default())
         .manage(spell::SpellState::default())
@@ -32,6 +36,7 @@ pub fn run() {
             project::import_zip,
             project::export_zip,
             project::watch_project,
+            platform::check_tex,
             compile::compile,
             compile::cancel_compile,
             lsp::lsp_start,

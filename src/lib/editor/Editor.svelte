@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { app } from "../store.svelte";
+  import { basename } from "../platform";
   import { api } from "../api";
   import { recheckSpelling, type SpellMenuRequest } from "./spell";
 
@@ -39,7 +40,7 @@
   {#each app.openFiles as path (path)}
     <div class="tab" class:active={path === app.active}>
       <button class="label" title={path} onclick={() => app.openFile(path)}>
-        {path.split("/").pop()}
+        {basename(path)}
       </button>
       <button class="close" title="Cerrar" onclick={() => app.closeFile(path)}>
         {app.dirty[path] ? "●" : "✕"}

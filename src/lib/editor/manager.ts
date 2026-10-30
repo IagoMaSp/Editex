@@ -23,6 +23,7 @@ import { latexLanguage, latexHighlight, closeEnvironmentOnEnter } from "./latex"
 import { compileDiagnostics, setCompileDiagnostics } from "./diagnostics";
 import { spellChecker, type SpellMenuRequest } from "./spell";
 import { editorTheme } from "./theme";
+import { fileUri } from "../platform";
 import { pasteImages } from "./images";
 import { mathPreview } from "./math";
 import { expandSnippet, snippetSource, type SnippetDef } from "./snippets";
@@ -75,7 +76,7 @@ export class EditorManager {
   }
 
   private uri(path: string) {
-    return encodeURI(`file://${this.root}/${path}`);
+    return fileUri(`${this.root}/${path}`);
   }
 
   private lspExtension(path: string): Extension {
