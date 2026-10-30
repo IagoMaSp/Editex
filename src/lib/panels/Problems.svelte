@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../store.svelte";
+  import { explain } from "../errors";
 
   let { onclose }: { onclose: () => void } = $props();
   let tab = $state<"problems" | "log">("problems");
@@ -25,6 +26,7 @@
     <button class:sel={tab === "log"} onclick={() => (tab = "log")}>Salida</button>
     <div class="spacer"></div>
     {#if tab === "problems"}
+      <span class="hint">F8 / Shift+F8 para recorrerlos</span>
       <label><input type="checkbox" bind:checked={showInfo} /> Cajas over/underfull ({counts.info})</label>
     {/if}
     <button class="icon" title="Cerrar" onclick={onclose}>✕</button>
@@ -34,7 +36,10 @@
       {#each list as d, i (i)}
         <button class="item {d.severity}" onclick={() => open(d.file, d.line)}>
           <span class="sev">{d.severity === "error" ? "●" : d.severity === "warning" ? "▲" : "○"}</span>
-          <span class="msg">{d.message}</span>
+          <span class="msg">
+            {d.message}
+            {#if explain(d.message)}<small class="why">{explain(d.message)}</small>{/if}
+          </span>
           <span class="loc">{d.file ?? ""}{d.line ? `:${d.line}` : ""}</span>
         </button>
       {:else}
@@ -75,6 +80,10 @@
   }
   .spacer {
     flex: 1;
+  }
+  .hint {
+    color: var(--text-faint);
+    margin-right: 12px;
   }
   label {
     display: flex;
@@ -134,6 +143,12 @@
   .msg {
     flex: 1;
     word-break: break-word;
+  }
+  .why {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
   }
   .loc {
     flex: none;

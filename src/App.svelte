@@ -15,6 +15,7 @@
   import { isTextFile } from "./lib/store.svelte";
   import { FIGURES_DIR, IMAGE_EXT, insertFigure } from "./lib/editor/images";
   import { recheckSpelling } from "./lib/editor/spell";
+  import { snippet } from "@codemirror/autocomplete";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import type { Engine, FileNode, SpellLang, AutoCompile } from "./lib/api";
 
@@ -119,6 +120,11 @@
       ...engines.map(([e, name]) => c(`Motor: ${name}`, () => setSetting("engine", e), app.settings.engine === e ? "actual" : undefined)),
       ...langs.map(([l, name]) => c(`Ortografía: ${name}`, () => setSetting("spellLang", l), app.settings.spellLang === l ? "actual" : undefined)),
       ...autos.map(([a, name]) => c(`Compilar automáticamente: ${name}`, () => setSetting("autoCompile", a), app.settings.autoCompile === a ? "actual" : undefined)),
+      c("Insertar snippet…", () => (ui.palette = "snippets"), "o escribe el prefijo + Tab"),
+      c("Editar mis snippets del proyecto", () => app.editUserSnippets()),
+      c(`${app.settings.mathPreview ? "Desactivar" : "Activar"} vista previa de fórmulas`, () => setSetting("mathPreview", !app.settings.mathPreview)),
+      c("Ir al siguiente error", () => app.nextProblem(1), "F8"),
+      c("Ir al error anterior", () => app.nextProblem(-1), "Shift+F8"),
       c("Ajustes del proyecto", () => (ui.settings = true)),
       c("Abrir carpeta…", openFolder, "Ctrl+O"),
       c("Importar ZIP de Overleaf…", importZip),
@@ -138,6 +144,24 @@
     }));
     return [...files, ...sections];
   });
+
+  const snippetItems = $derived.by((): PaletteItem[] =>
+    // Leer `ui.palette` hace que la lista se recalcule al abrirla (los snippets pueden haber cambiado).
+    ui.palette === "snippets"
+      ? app.snippets.map((s) => ({
+          label: s.prefix,
+          detail: s.description,
+          kind: "✎",
+          run: () => {
+            const view = app.editor.view;
+            if (!view || !app.active) return;
+            const { from, to } = view.state.selection.main;
+            snippet(s.body.replace(/\t/g, "  "))(view, null, from, to);
+            view.focus();
+          },
+        }))
+      : [],
+  );
 
   /** Archivos arrastrados desde el gestor de archivos del sistema. */
   async function onOsDrop(paths: string[], x: number, y: number) {
@@ -180,6 +204,11 @@
   });
 
   function onKey(e: KeyboardEvent) {
+    if (e.key === "F8" && app.root && !(e.target as HTMLElement)?.closest?.(".cm-editor")) {
+      e.preventDefault();
+      void app.nextProblem(e.shiftKey ? -1 : 1);
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     if (!mod || !app.root) return;
     // Atajos globales, también dentro del editor.
@@ -310,6 +339,8 @@
 
 {#if ui.palette === "commands"}
   <CommandPalette items={commands} placeholder="Escribe un comando…" onclose={() => (ui.palette = null)} />
+{:else if ui.palette === "snippets"}
+  <CommandPalette items={snippetItems} placeholder="Insertar snippet…" onclose={() => (ui.palette = null)} />
 {:else if ui.palette === "files"}
   <CommandPalette items={fileItems} placeholder="Ir a archivo o sección…" onclose={() => (ui.palette = null)} />
 {/if}

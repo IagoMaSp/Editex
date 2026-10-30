@@ -20,6 +20,22 @@
   let pending: { node: FileNode; x: number; y: number } | null = null;
   let suppressClick = false;
 
+  /** Errores/advertencias de la última compilación por archivo y carpeta. */
+  const problems = $derived.by(() => {
+    const out: Record<string, { error: number; warning: number }> = {};
+    for (const d of app.diagnostics) {
+      if (!d.file || d.file.startsWith("/") || d.severity === "info") continue;
+      // Cuenta en el archivo y en cada carpeta que lo contiene.
+      const parts = d.file.split("/");
+      for (let i = 1; i <= parts.length; i++) {
+        const key = parts.slice(0, i).join("/");
+        out[key] ??= { error: 0, warning: 0 };
+        out[key][d.severity]++;
+      }
+    }
+    return out;
+  });
+
   const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
   const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
@@ -235,7 +251,12 @@
             onkeydown={(e) => onRowKey(e, node)}
           >
             <span class="ic" class:dir={node.is_dir}>{icon(node)}</span>
-            <span class="name">{node.name}</span>
+            <span class="name" class:has-error={problems[node.path]?.error} class:has-warning={!problems[node.path]?.error && problems[node.path]?.warning}>{node.name}</span>
+            {#if problems[node.path]?.error}
+              <span class="badge err" title="{problems[node.path].error} errores">{problems[node.path].error}</span>
+            {:else if problems[node.path]?.warning}
+              <span class="badge warn" title="{problems[node.path].warning} advertencias">{problems[node.path].warning}</span>
+            {/if}
             {#if app.dirty[node.path]}<span class="dot"></span>{/if}
           </button>
         {/if}
@@ -359,6 +380,28 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
+  }
+  .has-error {
+    color: var(--danger);
+  }
+  .has-warning {
+    color: var(--warning);
+  }
+  .badge {
+    flex: none;
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: center;
+    color: white;
+  }
+  .badge.err {
+    background: var(--danger);
+  }
+  .badge.warn {
+    background: var(--warning);
   }
   .dot {
     width: 7px;

@@ -2,6 +2,7 @@
 import { RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { Diagnostic } from "../api";
+import { explain } from "../errors";
 
 export const setCompileDiagnostics = StateEffect.define<Diagnostic[]>();
 
@@ -28,7 +29,7 @@ export const compileDiagnostics = StateField.define<DecorationSet>({
           tr.state.doc.line(line).from,
           Decoration.line({
             class: `cm-compile-${worst.severity}`,
-            attributes: { title: list.map((d) => d.message).join("\n") },
+            attributes: { title: list.map((d) => d.message + (explain(d.message) ? `\n→ ${explain(d.message)}` : "")).join("\n\n") },
           }),
         );
       }
