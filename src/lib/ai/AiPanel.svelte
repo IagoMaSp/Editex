@@ -27,7 +27,16 @@
     const v = app.editor.view;
     return !!v && !v.state.selection.main.empty;
   });
-  const errorCount = $derived(app.diagnostics.filter((d) => d.severity === "error").length);
+  const problemCount = $derived(app.diagnostics.filter((d) => d.severity !== "info").length);
+
+  // Segundos que lleva conectando (la primera conexión descarga ~270 MB).
+  let now = $state(Date.now());
+  $effect(() => {
+    if (ai.status !== "connecting") return;
+    const t = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(t);
+  });
+  const elapsed = $derived(ai.connectingSince ? Math.round((now - ai.connectingSince) / 1000) : 0);
 
   const SUGGESTIONS = [
     "Corrige los errores de la última compilación",
@@ -87,11 +96,17 @@
     }
     input = "";
     stick = true;
-    await ai.send(text, {
-      file: ctx.file,
-      selection: ctx.selection && hasSelection,
-      errors: ctx.errors,
-    });
+    const attachments = app.aiAttachments;
+    app.aiAttachments = [];
+    await ai.send(
+      text,
+      {
+        file: ctx.file,
+        selection: ctx.selection && hasSelection,
+        errors: ctx.errors,
+      },
+      attachments,
+    );
     textarea?.focus();
   }
 
@@ -210,7 +225,14 @@
             <button class="link" onclick={() => app.openTerminal(agent?.terminalCommand)}>Abrir {agent?.terminalCommand} en la terminal</button>
           </p>
         {:else if ai.status === "connecting"}
-          <p><span class="spin"></span> Iniciando {agent?.name}…</p>
+          <p><span class="spin"></span> Iniciando {agent?.name}… {elapsed > 3 ? `${elapsed} s` : ""}</p>
+          {#if elapsed > 8}
+            <p class="small">
+              La primera vez se descarga el adaptador y el motor de {agent?.name} (unos 270 MB): puede tardar un par de
+              minutos. Las siguientes veces arranca en segundos.
+            </p>
+          {/if}
+          <button onclick={() => ai.disconnect()}>Cancelar</button>
         {:else}
           <p>¿Qué quieres hacer?</p>
           {#each SUGGESTIONS as s (s)}
@@ -315,6 +337,10 @@
       </div>
     {/if}
 
+    {#if ai.status === "error" && ai.items.length}
+      <div class="row"><button class="primary" onclick={connect}>Reintentar</button></div>
+    {/if}
+
     {#if ai.log.length && (ai.status === "connecting" || ai.status === "error" || ai.status === "auth")}
       <details class="log" open={ai.status === "error"}>
         <summary>Registro del agente</summary>
@@ -324,11 +350,22 @@
   </div>
 
   <div class="composer">
+    {#if app.aiAttachments.length}
+      <div class="attachments">
+        {#each app.aiAttachments as d, i (i)}
+          <span class="att {d.severity}" title={d.message}>
+            {d.severity === "error" ? "●" : "▲"}
+            {d.file ? d.file.split("/").pop() : "?"}{d.line ? `:${d.line}` : ""} — {d.message.slice(0, 60)}{d.message.length > 60 ? "…" : ""}
+            <button title="Quitar" onclick={() => (app.aiAttachments = app.aiAttachments.filter((_, j) => j !== i))}>✕</button>
+          </span>
+        {/each}
+      </div>
+    {/if}
     <div class="ctx">
       <label class:off={!app.active}><input type="checkbox" bind:checked={ctx.file} disabled={!app.active} /> Archivo actual</label>
       <label class:off={!hasSelection}><input type="checkbox" bind:checked={ctx.selection} disabled={!hasSelection} /> Selección</label>
       <label class:off={!app.diagnostics.length}>
-        <input type="checkbox" bind:checked={ctx.errors} disabled={!app.diagnostics.length} /> Errores{errorCount ? ` (${errorCount})` : ""}
+        <input type="checkbox" bind:checked={ctx.errors} disabled={!app.diagnostics.length} /> Todos los errores y advertencias{problemCount ? ` (${problemCount})` : ""}
       </label>
     </div>
     <div class="input">
@@ -336,7 +373,11 @@
         bind:this={textarea}
         bind:value={input}
         rows="3"
-        placeholder={connected ? `Pide algo a ${ai.agentName}… (Enter envía, Shift+Enter salto de línea)` : `Escribe y se conectará ${agent?.name}`}
+        placeholder={app.aiAttachments.length
+          ? "¿Qué quieres hacer con estos problemas? (p. ej. «corrígelos» o «explícame qué pasa»)"
+          : connected
+            ? `Pide algo a ${ai.agentName}… (Enter envía, Shift+Enter salto de línea)`
+            : `Escribe y se conectará ${agent?.name}`}
         onkeydown={onKey}
         disabled={ai.status === "connecting"}
       ></textarea>
@@ -681,6 +722,40 @@
     border-top: 1px solid var(--border);
     padding: 8px;
     flex: none;
+  }
+  .attachments {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+    max-height: 120px;
+    overflow: auto;
+  }
+  .att {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    padding: 3px 4px 3px 8px;
+    border-radius: 6px;
+    background: var(--error-line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .att.warning {
+    background: var(--warning-line);
+  }
+  .att.error {
+    color: var(--text);
+  }
+  .att button {
+    margin-left: auto;
+    border: none;
+    background: none;
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--text-muted);
   }
   .ctx {
     display: flex;

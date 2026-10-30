@@ -55,6 +55,7 @@ pub fn run() {
             acp::acp_spawn,
             acp::acp_send,
             acp::acp_kill,
+            acp::acp_log_path,
             synctex::synctex_forward,
             synctex::synctex_inverse,
         ])

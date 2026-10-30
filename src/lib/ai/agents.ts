@@ -7,6 +7,8 @@ export interface AgentConfig {
   /** Proceso que habla ACP por stdin/stdout. */
   command: string;
   args: string[];
+  /** Variables de entorno extra para el proceso (opcional). */
+  env?: Record<string, string>;
   /** Comando para usar el agente directamente en la terminal integrada. */
   terminalCommand: string;
   /** Cómo iniciar sesión si el agente lo pide. */

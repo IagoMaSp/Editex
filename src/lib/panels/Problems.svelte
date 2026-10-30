@@ -23,7 +23,7 @@
 
 <div class="panel">
   <div class="tabs">
-    <button class:sel={ui.bottomTab === "problems"} onclick={() => (ui.bottomTab = "problems")}>
+    <button class:sel={ui.bottomTab === "problems"} title="F8 / Shift+F8 para recorrerlos" onclick={() => (ui.bottomTab = "problems")}>
       Problemas <span class="badge err">{counts.error}</span><span class="badge warn">{counts.warning}</span>
     </button>
     <button class:sel={ui.bottomTab === "log"} onclick={() => (ui.bottomTab = "log")}>Salida</button>
@@ -37,14 +37,26 @@
       {/each}
       <button class="icon" title="Reiniciar terminal" onclick={() => app.terminal?.restart()}>⟳</button>
     {/if}
-    {#if ui.bottomTab === "problems" && counts.error}
-      <button class="launch" title="Pide al agente de IA que corrija los errores" onclick={() => app.askAi("Corrige los errores de la última compilación. Explica brevemente qué cambiaste.", true)}>
+    {#if ui.bottomTab === "problems" && (counts.error || counts.warning)}
+      <button
+        class="launch"
+        title="Pide al agente de IA que los corrija ahora"
+        onclick={() =>
+          app.askAi(
+            counts.error
+              ? "Corrige los errores de la última compilación. Explica brevemente qué cambiaste."
+              : "Revisa las advertencias de la última compilación y corrige las que tengan solución.",
+            true,
+          )}
+      >
         ✦ Arreglar con IA
+      </button>
+      <button class="launch" title="Adjunta todos los problemas al chat para preguntar lo que quieras" onclick={() => app.attachToAi(list.filter((d) => d.severity !== "info"))}>
+        ＋ Añadir al chat
       </button>
     {/if}
     {#if ui.bottomTab === "problems"}
-      <span class="hint">F8 / Shift+F8 para recorrerlos</span>
-      <label><input type="checkbox" bind:checked={showInfo} /> Cajas over/underfull ({counts.info})</label>
+      <label title="Mostrar cajas over/underfull"><input type="checkbox" bind:checked={showInfo} /> Cajas ({counts.info})</label>
     {/if}
     <button class="icon" title="Cerrar" onclick={onclose}>✕</button>
   </div>
@@ -58,6 +70,22 @@
             {#if explain(d.message)}<small class="why">{explain(d.message)}</small>{/if}
           </span>
           <span class="loc">{d.file ?? ""}{d.line ? `:${d.line}` : ""}</span>
+          <span
+            class="to-ai"
+            role="button"
+            tabindex="0"
+            title="Añadir este problema al chat de IA"
+            onclick={(e) => {
+              e.stopPropagation();
+              app.attachToAi([d]);
+            }}
+            onkeydown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                app.attachToAi([d]);
+              }
+            }}>✦</span
+          >
         </button>
       {:else}
         <p class="empty">{app.lastResult ? "Sin problemas 🎉" : "Aún no se ha compilado"}</p>
@@ -84,6 +112,9 @@
     background: var(--bg-panel);
   }
   .tabs {
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
     display: flex;
     align-items: center;
     gap: 2px;
@@ -140,6 +171,8 @@
     min-height: 0;
   }
   .launch {
+    flex: none;
+    white-space: nowrap;
     border: none;
     background: var(--bg-hover);
     font-size: 12px;
@@ -193,6 +226,21 @@
     margin-top: 2px;
     color: var(--text-muted);
     font-size: 12px;
+  }
+  .to-ai {
+    flex: none;
+    opacity: 0;
+    color: var(--accent);
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+  .item:hover .to-ai,
+  .to-ai:focus {
+    opacity: 1;
+  }
+  .to-ai:hover {
+    background: var(--accent);
+    color: var(--accent-text);
   }
   .loc {
     flex: none;
