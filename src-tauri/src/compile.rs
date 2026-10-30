@@ -12,7 +12,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::State;
-use tokio::process::Command;
+
 use tokio::sync::oneshot;
 
 use crate::log_parser::{parse_log, Diagnostic};
@@ -55,8 +55,9 @@ pub struct CompileResult {
 }
 
 fn which(bin: &str) -> bool {
+    let exe = format!("{bin}{}", std::env::consts::EXE_SUFFIX);
     std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|p| p.join(bin).is_file()))
+        .map(|paths| std::env::split_paths(&paths).any(|p| p.join(&exe).is_file()))
         .unwrap_or(false)
 }
 
@@ -143,7 +144,7 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
         .is_some_and(|prev| prev != format!("{pretex}\0{fmt:?}"));
 
     let mut cmd = if which("latexmk") {
-        let mut c = Command::new("latexmk");
+        let mut c = crate::command("latexmk");
         let flag = match engine.as_str() {
             "xelatex" => "-xelatex",
             "lualatex" => "-lualatex",
@@ -161,7 +162,7 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
         c
     } else {
         // Sin latexmk: una pasada del motor (suficiente para la vista previa).
-        let mut c = Command::new(&engine_cmd[0]);
+        let mut c = crate::command(&engine_cmd[0]);
         c.args(&engine_cmd[1..])
             .args(["-synctex=1", "-interaction=nonstopmode", "-file-line-error"])
             .arg(format!("-output-directory={build_rel}"))
@@ -178,8 +179,9 @@ pub async fn run_compile(state: &CompileState, req: CompileRequest) -> Result<Co
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     if fmt.is_some() {
-        // ':' final = añadir las rutas por defecto de kpathsea.
-        cmd.env("TEXFORMATS", format!("{}:", full_dir.display()));
+        // Separador final = añadir las rutas por defecto de kpathsea (';' en Windows).
+        let sep = if cfg!(windows) { ';' } else { ':' };
+        cmd.env("TEXFORMATS", format!("{}{sep}", full_dir.display()));
     }
     #[cfg(unix)]
     cmd.process_group(0);
@@ -342,7 +344,7 @@ async fn ensure_format(root: &Path, main: &str, outdir: &Path, engine: &str) -> 
         return Ok(false);
     }
 
-    let out = Command::new(engine)
+    let out = crate::command(engine)
         .current_dir(root)
         .args(["-ini", "-interaction=nonstopmode"])
         .arg(format!("-jobname={FMT_NAME}"))

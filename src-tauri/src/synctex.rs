@@ -3,7 +3,6 @@
 use std::path::Path;
 
 use serde::Serialize;
-use tokio::process::Command;
 
 use crate::project::to_rel;
 
@@ -28,7 +27,7 @@ fn field<'a>(block: &'a str, key: &str) -> Option<&'a str> {
 }
 
 async fn run(args: &[String], cwd: &Path) -> Result<String, String> {
-    let out = Command::new("synctex")
+    let out = crate::command("synctex")
         .args(args)
         .current_dir(cwd)
         .output()

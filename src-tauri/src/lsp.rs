@@ -5,7 +5,7 @@ use std::process::Stdio;
 
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, Command};
+use tokio::process::{Child, ChildStdin};
 use tokio::sync::Mutex;
 
 #[derive(Default)]
@@ -19,7 +19,7 @@ pub async fn lsp_start(app: AppHandle, state: State<'_, LspState>, root: String)
     if let Some(mut old) = state.child.lock().await.take() {
         let _ = old.kill().await;
     }
-    let mut child = Command::new("texlab")
+    let mut child = crate::command("texlab")
         .current_dir(&root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
