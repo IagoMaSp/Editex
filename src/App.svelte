@@ -556,7 +556,7 @@
   aside {
     /* En ventanas estrechas los paneles laterales ceden espacio antes que el editor. */
     flex: 0 1 auto;
-    min-width: 150px;
+    min-width: 140px;
     display: flex;
     flex-direction: column;
     background: var(--bg-sidebar);
@@ -595,7 +595,8 @@
   }
   .center {
     flex: 1 0 0;
-    min-width: 260px;
+    /* El editor tiene prioridad: el PDF y los paneles laterales encogen antes. */
+    min-width: min(420px, 36vw);
     display: flex;
     flex-direction: column;
   }
@@ -634,8 +635,9 @@
     display: none;
   }
   .pdf {
-    flex: 0 1 auto;
-    min-width: 180px;
+    /* Encoge más deprisa que el resto (flex-shrink alto). */
+    flex: 0 4 auto;
+    min-width: 160px;
   }
 
   footer {

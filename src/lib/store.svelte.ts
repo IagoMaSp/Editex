@@ -97,6 +97,17 @@ class AppState {
   /** Petición pendiente para el panel de IA (p. ej. «Arreglar con IA» desde Problemas). */
   aiRequest = $state<{ text: string; errors: boolean } | null>(null);
 
+  /** Problemas de compilación adjuntos al próximo mensaje del chat de IA. */
+  aiAttachments = $state<Diagnostic[]>([]);
+
+  /** Adjunta errores/advertencias al chat de IA (sin enviar) y abre el panel. */
+  attachToAi(diags: Diagnostic[]) {
+    this.ui.ai = true;
+    const key = (d: Diagnostic) => `${d.file}:${d.line}:${d.message}`;
+    const have = new Set(this.aiAttachments.map(key));
+    this.aiAttachments = [...this.aiAttachments, ...diags.filter((d) => !have.has(key(d)))];
+  }
+
   askAi(text: string, errors = false) {
     this.ui.ai = true;
     this.aiRequest = { text, errors };

@@ -6,6 +6,8 @@ import { api } from "../api";
 import { app } from "../store.svelte";
 import { fileUri, isMac, isWindows } from "../platform";
 import type { AgentConfig } from "./agents";
+import type { Diagnostic } from "../api";
+import { explain } from "../errors";
 
 export type ChatItem =
   | { kind: "user"; id: number; text: string; context: string[] }
@@ -76,6 +78,10 @@ class AiSession {
   log = $state<string[]>([]);
   /** Archivos que el agente modificó en esta conversación. */
   edited = $state<string[]>([]);
+  /** Momento en que empezó la conexión (para mostrar cuánto lleva). */
+  connectingSince = $state<number | null>(null);
+  /** Archivo donde se guarda el registro de los agentes. */
+  logPath = $state<string | null>(null);
 
   private conn: acp.ClientSideConnection | null = null;
   private procId: number | null = null;
@@ -99,8 +105,10 @@ class AiSession {
     this.agent = agent;
     this.agentName = agent.name;
     this.status = "connecting";
+    this.connectingSince = Date.now();
     this.log = [];
     this.authMethods = [];
+    this.logPath = await invoke<string | null>("acp_log_path").catch(() => null);
 
     const lines = new Channel<string>();
     const stderr = new Channel<string>();
@@ -116,7 +124,7 @@ class AiSession {
       }
     };
     stderr.onmessage = (line) => this.addLog(line);
-    exit.onmessage = () => {
+    exit.onmessage = (code) => {
       try {
         controller.close();
       } catch {
@@ -127,7 +135,15 @@ class AiSession {
         this.conn = null;
         if (this.status !== "off") {
           this.status = "error";
-          this.notice(`${agent.name} se cerró.${this.log.length ? " Revisa el registro." : ""}`, true);
+          this.connectingSince = null;
+          // Las últimas líneas de stderr suelen explicar el fallo.
+          const tail = this.log.filter((l) => l.trim()).slice(-8).join("\n");
+          this.notice(
+            `${agent.name} se cerró${code != null ? ` (código ${code})` : ""}.` +
+              (tail ? `\n\n${tail}` : "") +
+              (this.logPath ? `\n\nRegistro completo: ${this.logPath}` : ""),
+            true,
+          );
         }
       }
     };
@@ -136,6 +152,7 @@ class AiSession {
       this.procId = await invoke<number>("acp_spawn", {
         command: agent.command,
         args: agent.args,
+        env: agent.env ?? null,
         cwd: app.root,
         onLine: lines,
         onStderr: stderr,
@@ -175,9 +192,11 @@ class AiSession {
     this.currentMode = s.modes?.currentModeId ?? null;
     this.firstPrompt = true;
     this.status = "ready";
+    this.connectingSince = null;
   }
 
   private handleError(e: unknown) {
+    this.connectingSince = null;
     const err = e as { code?: number; message?: string };
     const msg = err?.message ?? String(e);
     // -32000 = autenticación requerida en ACP.
@@ -222,6 +241,7 @@ class AiSession {
     this.conn = null;
     this.sessionId = null;
     this.status = "off";
+    this.connectingSince = null;
     if (id !== null) await invoke("acp_kill", { id }).catch(() => {});
   }
 
@@ -300,11 +320,43 @@ class AiSession {
     return { blocks, labels };
   }
 
-  async send(text: string, ctx: PromptContext) {
+  /** Texto para el agente con cada problema, su explicación y la línea del código. */
+  private async describeProblems(diags: Diagnostic[]): Promise<string> {
+    const out: string[] = [];
+    for (const d of diags) {
+      let code = "";
+      if (d.file && d.line && this.root && !d.file.startsWith("/")) {
+        try {
+          const text = app.editor.has(d.file) ? app.editor.content(d.file) : await api.readFile(this.root, d.file);
+          const lines = text.split("\n");
+          const from = Math.max(0, d.line - 3);
+          code = lines
+            .slice(from, d.line + 2)
+            .map((l, i) => `${from + i + 1 === d.line ? ">" : " "} ${from + i + 1} | ${l}`)
+            .join("\n");
+        } catch {
+          /* archivo no disponible: solo el mensaje */
+        }
+      }
+      const why = explain(d.message);
+      out.push(
+        `- [${d.severity === "error" ? "error" : "advertencia"}] ${d.file ?? "?"}${d.line ? `:${d.line}` : ""}: ${d.message}` +
+          (why ? `\n  (posible causa: ${why})` : "") +
+          (code ? `\n\`\`\`\n${code}\n\`\`\`` : ""),
+      );
+    }
+    return out.join("\n");
+  }
+
+  async send(text: string, ctx: PromptContext, attachments: Diagnostic[] = []) {
     if (!this.conn || !this.sessionId || this.status !== "ready" || !text.trim()) return;
     // El agente lee de disco: guardamos antes lo que haya pendiente.
     await app.saveAll();
     const { blocks, labels } = this.buildContext(ctx);
+    if (attachments.length) {
+      blocks.push({ type: "text", text: "Problemas de compilación que el usuario adjuntó:\n" + (await this.describeProblems(attachments)) });
+      labels.push(attachments.length === 1 ? `${attachments[0].file ?? ""}:${attachments[0].line ?? ""}` : `${attachments.length} problemas adjuntos`);
+    }
     this.push({ kind: "user", id: nextId++, text, context: labels });
     this.firstPrompt = false;
     this.status = "busy";
