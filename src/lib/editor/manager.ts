@@ -14,7 +14,7 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput, indentUnit } from "@codemirror/language";
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
+import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import type { LSPClient } from "@codemirror/lsp-client";
@@ -24,6 +24,8 @@ import { compileDiagnostics, setCompileDiagnostics } from "./diagnostics";
 import { spellChecker, type SpellMenuRequest } from "./spell";
 import { editorTheme } from "./theme";
 import { pasteImages } from "./images";
+import { mathPreview } from "./math";
+import { expandSnippet, snippetSource, type SnippetDef } from "./snippets";
 
 export interface EditorCallbacks {
   onDirty(path: string, dirty: boolean): void;
@@ -33,6 +35,9 @@ export interface EditorCallbacks {
   onSyncForward(line: number): void;
   spellLang(): string;
   saveImage(stem: string, ext: string, data: Uint8Array): Promise<string | null>;
+  snippets(): SnippetDef[];
+  mathPreview(): boolean;
+  onNextProblem(dir: 1 | -1): void;
 }
 
 const IDLE_MS = 1200;
@@ -119,6 +124,9 @@ export class EditorManager {
             run: (v) => (this.cb.onSyncForward(v.state.doc.lineAt(v.state.selection.main.head).number), true),
           },
           { key: "Enter", run: closeEnvironmentOnEnter },
+          { key: "Tab", run: (v) => acceptCompletion(v) || expandSnippet(() => this.cb.snippets())(v) },
+          { key: "F8", run: () => (this.cb.onNextProblem(1), true) },
+          { key: "Shift-F8", run: () => (this.cb.onNextProblem(-1), true) },
         ]),
       ),
       keymap.of([
@@ -133,6 +141,8 @@ export class EditorManager {
       ]),
       editorTheme,
       compileDiagnostics,
+      /\.tex$/.test(path) ? mathPreview(() => this.cb.mathPreview()) : [],
+      EditorState.languageData.of(() => [{ autocomplete: snippetSource(() => this.cb.snippets()) }]),
       /\.(tex|txt|md)$/.test(path) ? spellChecker(() => this.cb.spellLang(), (req) => this.onSpellMenu?.(req)) : [],
       /\.tex$/.test(path) ? pasteImages((stem, ext, data) => this.cb.saveImage(stem, ext, data)) : [],
       this.lsp.of(this.lspExtension(path)),

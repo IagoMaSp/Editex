@@ -49,6 +49,11 @@
       <option value="off">Desactivada</option>
     </select>
   </label>
+  <label class="check">
+    <input type="checkbox" bind:checked={app.settings.mathPreview} onchange={() => changed()} />
+    <span>Vista previa de fórmulas<small>Muestra la fórmula renderizada al poner el cursor o el ratón encima.</small></span>
+  </label>
+  <button class="link" onclick={() => (onclose(), app.editUserSnippets())}>Editar mis snippets…</button>
   <h4>Velocidad</h4>
   <label class="check">
     <input type="checkbox" bind:checked={app.settings.fastMode} onchange={() => changed()} />

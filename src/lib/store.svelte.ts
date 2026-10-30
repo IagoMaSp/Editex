@@ -4,6 +4,8 @@ import { api, type AutoCompile, type CompileResult, type Diagnostic, type Engine
 import { EditorManager } from "./editor/manager";
 import { startLsp } from "./editor/lsp";
 import { FIGURES_DIR } from "./editor/images";
+import { parseMacros, setMathMacros } from "./editor/math";
+import { BUILTIN_SNIPPETS, parseUserSnippets, USER_SNIPPETS_TEMPLATE, type SnippetDef } from "./editor/snippets";
 
 export interface ProjectSettings {
   main: string | null;
@@ -14,6 +16,7 @@ export interface ProjectSettings {
   shellEscape: boolean;
   precompiledPreamble: boolean;
   draftImages: boolean;
+  mathPreview: boolean;
 }
 
 const DEFAULT_SETTINGS: ProjectSettings = {
@@ -25,9 +28,11 @@ const DEFAULT_SETTINGS: ProjectSettings = {
   shellEscape: false,
   precompiledPreamble: false,
   draftImages: false,
+  mathPreview: true,
 };
 
 const SETTINGS_FILE = ".editex/settings.json";
+export const SNIPPETS_FILE = ".editex/snippets.json";
 const RECENTS_KEY = "editex.recent";
 
 const TEXT_EXT = /\.(tex|sty|cls|bib|bst|txt|md|cfg|def|ltx|dtx|ins|bbx|cbx|lbx|csv|dat|json|yaml|yml|lua|py|tikz|pgf)$/i;
@@ -69,7 +74,7 @@ class AppState {
     pdf: true,
     problems: false,
     settings: false,
-    palette: null as null | "commands" | "files",
+    palette: null as null | "commands" | "files" | "snippets",
   });
 
   editor = new EditorManager({
@@ -81,6 +86,9 @@ class AppState {
     onCompile: (full) => void this.compile(full),
     onSyncForward: (line) => this.syncForward?.(line),
     spellLang: () => this.settings.spellLang,
+    snippets: () => this.snippets,
+    mathPreview: () => this.settings.mathPreview,
+    onNextProblem: (dir) => void this.nextProblem(dir),
     saveImage: async (stem, ext, data) => {
       if (!this.root) return null;
       try {
@@ -93,6 +101,11 @@ class AppState {
       }
     },
   });
+
+  /** Snippets incluidos + los del proyecto (.editex/snippets.json). */
+  snippets: SnippetDef[] = BUILTIN_SNIPPETS;
+  /** Índice del último problema visitado con F8. */
+  private problemIndex = -1;
 
   /** Lo registra el visor PDF para hacer forward search. */
   syncForward: ((line: number) => void) | null = null;
@@ -131,6 +144,7 @@ class AppState {
 
     await this.refreshTree();
     await this.refreshOutline();
+    await this.loadUserSnippets();
     await api.watchProject(root);
     this.unlisten = await listen<string[]>("fs-changed", (e) => this.onFsChanged(e.payload));
 
@@ -159,6 +173,70 @@ class AppState {
 
   async refreshOutline() {
     if (this.root && this.settings.main) this.outline = await api.outline(this.root, this.settings.main);
+    await this.refreshMacros();
+  }
+
+  /** Texto actual de un archivo: el del editor si está abierto, si no el del disco. */
+  private async text(path: string) {
+    return this.editor.has(path) ? this.editor.content(path) : api.readFile(this.root!, path);
+  }
+
+  /** Macros del preámbulo (y de los archivos que incluye) para la vista previa de fórmulas. */
+  async refreshMacros() {
+    if (!this.root || !this.settings.main) return;
+    try {
+      const main = await this.text(this.settings.main);
+      const end = main.indexOf("\\begin{document}");
+      const preamble = end >= 0 ? main.slice(0, end) : main;
+      let all = preamble;
+      for (const m of preamble.matchAll(/\\(?:input|include)\s*\{([^}]+)\}/g)) {
+        const name = m[1].trim();
+        all += "\n" + (await this.text(name.endsWith(".tex") ? name : `${name}.tex`).catch(() => ""));
+      }
+      setMathMacros(parseMacros(all));
+    } catch {
+      setMathMacros({});
+    }
+  }
+
+  async loadUserSnippets() {
+    this.snippets = BUILTIN_SNIPPETS;
+    if (!this.root) return;
+    try {
+      const user = parseUserSnippets(await api.readFile(this.root, SNIPPETS_FILE));
+      // Los del usuario tienen prioridad sobre los incluidos con el mismo prefijo.
+      const prefixes = new Set(user.map((s) => s.prefix));
+      this.snippets = [...user, ...BUILTIN_SNIPPETS.filter((s) => !prefixes.has(s.prefix))];
+    } catch (e) {
+      if (!String(e).includes("No such file") && !String(e).includes("no existe")) this.notify(`snippets.json no es válido: ${e}`);
+    }
+  }
+
+  /** Abre (creándolo si hace falta) el archivo de snippets del proyecto. */
+  async editUserSnippets() {
+    if (!this.root) return;
+    try {
+      await api.readFile(this.root, SNIPPETS_FILE);
+    } catch {
+      await api.writeFile(this.root, SNIPPETS_FILE, USER_SNIPPETS_TEMPLATE);
+    }
+    await this.openFile(SNIPPETS_FILE);
+  }
+
+  /** Salta al siguiente/anterior error o advertencia (F8 / Shift+F8). */
+  async nextProblem(dir: 1 | -1) {
+    const list = this.diagnostics.filter((d) => d.file && !d.file.startsWith("/") && d.line && d.severity !== "info");
+    if (!list.length) {
+      this.notify(this.lastResult ? "No hay errores ni advertencias" : "Compila primero (Ctrl+Enter)");
+      return;
+    }
+    // Errores primero, luego advertencias; dentro de cada grupo, en orden de aparición.
+    const sorted = [...list.filter((d) => d.severity === "error"), ...list.filter((d) => d.severity === "warning")];
+    this.problemIndex = (this.problemIndex + dir + sorted.length) % sorted.length;
+    const d = sorted[this.problemIndex];
+    await this.openFile(d.file!, d.line!);
+    this.ui.problems = true;
+    this.notify(`${this.problemIndex + 1}/${sorted.length}: ${d.message}`);
   }
 
   private onFsChanged(paths: string[]) {
@@ -272,6 +350,8 @@ class AppState {
     if (!this.root || !this.dirty[path]) return;
     await api.writeFile(this.root, path, this.editor.content(path));
     this.editor.markSaved(path);
+    if (path === SNIPPETS_FILE) await this.loadUserSnippets();
+    if (path === this.settings.main) await this.refreshMacros();
   }
 
   async saveActive() {
@@ -314,6 +394,7 @@ class AppState {
       if (result.status === "cancelled") return;
       this.lastResult = result;
       this.diagnostics = result.diagnostics;
+      this.problemIndex = -1;
       if (this.active) this.editor.setCompileDiagnostics(result.diagnostics.filter((d) => d.file === this.active));
       if (result.pdf) {
         this.pdfPath = result.pdf;

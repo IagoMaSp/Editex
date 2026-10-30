@@ -95,7 +95,18 @@ mockIPC(
       }
       case "compile":
         await new Promise((r) => setTimeout(r, 400));
-        return { status: "ok", pdf: "/mock.pdf", diagnostics: [], durationMs: 400, mode: "completo (simulado)", output: "" };
+        return {
+          status: "error",
+          pdf: "/mock.pdf",
+          diagnostics: [
+            { file: "capitulos/metodos.tex", line: 4, severity: "error", message: "Undefined control sequence. — La energía \\foo" },
+            { file: "capitulos/resultados.tex", line: 3, severity: "warning", message: "Reference `fig:curva' on page 5 undefined on input line 3." },
+            { file: "main.tex", line: 30, severity: "error", message: "Missing $ inserted. — x_1" },
+          ],
+          durationMs: 400,
+          mode: "completo (simulado)",
+          output: "",
+        };
       case "read_binary":
         return (await fetch("/node_modules/.cache/mock.pdf")).arrayBuffer();
       case "save_binary":
