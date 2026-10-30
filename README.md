@@ -8,6 +8,16 @@ Editor LaTeX de escritorio, local y rápido. Tauri 2 (Rust) + Svelte 5 + CodeMir
 sudo pacman -S --needed texlive texlive-lang biber texlab webkit2gtk-4.1 hunspell-es_es hunspell-en_us
 ```
 
+## Instalar como app (Linux)
+
+```bash
+scripts/install-linux.sh
+```
+
+Compila en modo release e instala para tu usuario (sin sudo): el binario en `~/.local/bin/editex` y el lanzador «Editex» en el menú de aplicaciones. Para actualizar, vuelve a ejecutarlo; para quitarlo, `scripts/install-linux.sh --uninstall`.
+
+También se puede abrir un proyecto directamente: `editex ~/ruta/al/proyecto`.
+
 ## Desarrollo
 
 ```bash
