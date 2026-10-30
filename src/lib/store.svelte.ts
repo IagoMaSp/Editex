@@ -83,8 +83,16 @@ class AppState {
     bottomTab: "problems" as "problems" | "log" | "terminal",
     /** La terminal se crea la primera vez que se abre y luego se mantiene viva. */
     terminalStarted: false,
-    ai: false,
+    ai: localStorage.getItem("editex.aiOpen") === "1",
   });
+
+  constructor() {
+    $effect.root(() => {
+      $effect(() => {
+        localStorage.setItem("editex.aiOpen", this.ui.ai ? "1" : "0");
+      });
+    });
+  }
 
   /** Petición pendiente para el panel de IA (p. ej. «Arreglar con IA» desde Problemas). */
   aiRequest = $state<{ text: string; errors: boolean } | null>(null);

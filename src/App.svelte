@@ -318,7 +318,7 @@
         ⚠{#if errors}<span class="count">{errors}</span>{/if}
       </button>
       <button class="icon" class:on={ui.pdf} title="Vista previa PDF" onclick={() => (ui.pdf = !ui.pdf)}>▤</button>
-      <button class="icon ai-btn" class:on={ui.ai} title="Asistente de IA ({kbd('Ctrl+Shift+A')})" onclick={() => (ui.ai = !ui.ai)}>✦</button>
+      <button class="ai-btn" class:on={ui.ai} title="Asistente de IA: Claude Code, Codex… ({kbd('Ctrl+Shift+A')})" onclick={() => (ui.ai = !ui.ai)}>✦ IA</button>
       <button class="icon" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
       <button class="icon" class:on={ui.settings} title="Ajustes" onclick={() => (ui.settings = !ui.settings)}>⚙</button>
     </header>
@@ -551,13 +551,15 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    overflow: hidden;
   }
   aside {
-    flex: none;
+    /* En ventanas estrechas los paneles laterales ceden espacio antes que el editor. */
+    flex: 0 1 auto;
+    min-width: 150px;
     display: flex;
     flex-direction: column;
     background: var(--bg-sidebar);
-    min-width: 0;
   }
   .seg {
     display: flex;
@@ -592,8 +594,8 @@
     background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
   }
   .center {
-    flex: 1;
-    min-width: 0;
+    flex: 1 0 0;
+    min-width: 260px;
     display: flex;
     flex-direction: column;
   }
@@ -610,18 +612,30 @@
     border-top: 1px solid var(--border);
   }
   .aipanel {
-    flex: none;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 260px;
   }
   .ai-btn {
+    border: 1px solid var(--accent);
+    background: none;
     color: var(--accent);
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin: 0 4px;
+  }
+  .ai-btn:hover,
+  .ai-btn.on {
+    background: var(--accent);
+    color: var(--accent-text);
   }
   .problems.closed {
     display: none;
   }
   .pdf {
-    flex: none;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 180px;
   }
 
   footer {
