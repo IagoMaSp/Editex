@@ -67,6 +67,10 @@ class AppState {
   lspStatus = $state<"off" | "starting" | "ready" | "error">("off");
   recents = $state<string[]>(loadRecents());
   toast = $state<string | null>(null);
+  /** Archivos abiertos con cambios locales que además cambiaron en disco (p. ej. por un agente). */
+  conflicts = $state<Record<string, boolean>>({});
+  /** Último contenido guardado/leído de cada archivo abierto: distingue nuestras escrituras de las ajenas. */
+  private savedText = new Map<string, string>();
 
   /** Estado de la interfaz que también controla la paleta de comandos. */
   ui = $state({
@@ -76,7 +80,33 @@ class AppState {
     problems: false,
     settings: false,
     palette: null as null | "commands" | "files" | "snippets",
+    bottomTab: "problems" as "problems" | "log" | "terminal",
+    /** La terminal se crea la primera vez que se abre y luego se mantiene viva. */
+    terminalStarted: false,
+    ai: false,
   });
+
+  /** Petición pendiente para el panel de IA (p. ej. «Arreglar con IA» desde Problemas). */
+  aiRequest = $state<{ text: string; errors: boolean } | null>(null);
+
+  askAi(text: string, errors = false) {
+    this.ui.ai = true;
+    this.aiRequest = { text, errors };
+  }
+
+  /** Lo registra la terminal integrada. */
+  terminal: { run: (command: string) => Promise<void>; restart: () => Promise<void> } | null = null;
+
+  /** Abre la terminal integrada y, opcionalmente, ejecuta un comando en ella. */
+  async openTerminal(command?: string) {
+    this.ui.terminalStarted = true;
+    this.ui.problems = true;
+    this.ui.bottomTab = "terminal";
+    if (!command) return;
+    // La terminal se monta en el siguiente ciclo.
+    for (let i = 0; i < 50 && !this.terminal; i++) await new Promise((r) => setTimeout(r, 40));
+    await this.terminal?.run(command);
+  }
 
   editor = new EditorManager({
     onDirty: (path, dirty) => (this.dirty[path] = dirty),
@@ -246,12 +276,42 @@ class AppState {
       void this.refreshTree();
       if (paths.some((p) => p.endsWith(".tex"))) void this.refreshOutline();
     }, 200);
-    // Recarga archivos abiertos modificados fuera de la app (si no hay cambios locales).
     for (const p of paths) {
-      if (this.openFiles.includes(p) && !this.dirty[p] && this.root) {
-        api.readFile(this.root, p).then((text) => this.editor.reloadIfChanged(p, text)).catch(() => {});
-      }
+      if (this.openFiles.includes(p) && this.root) void this.syncFromDisk(p);
     }
+  }
+
+  /** Un archivo abierto cambió en disco: recargar si no hay cambios locales, o marcar conflicto. */
+  private async syncFromDisk(path: string) {
+    let disk: string;
+    try {
+      disk = await api.readFile(this.root!, path);
+    } catch {
+      return;
+    }
+    // Eco de nuestra propia escritura.
+    if (disk === this.savedText.get(path)) return;
+    if (this.dirty[path]) {
+      this.conflicts[path] = true;
+      this.notify(`${path} cambió en disco mientras tenías cambios sin guardar`);
+      return;
+    }
+    this.savedText.set(path, disk);
+    this.editor.reloadIfChanged(path, disk);
+  }
+
+  /** Resuelve un conflicto: quedarse con lo del disco o sobrescribirlo con lo del editor. */
+  async resolveConflict(path: string, keep: "disk" | "mine") {
+    if (!this.root) return;
+    if (keep === "disk") {
+      const disk = await api.readFile(this.root, path);
+      this.savedText.set(path, disk);
+      this.editor.reloadIfChanged(path, disk);
+      this.editor.markSaved(path);
+    } else {
+      await this.save(path);
+    }
+    delete this.conflicts[path];
   }
 
   async openFile(path: string, line?: number) {
@@ -262,6 +322,7 @@ class AppState {
     }
     if (!this.editor.has(path)) {
       const text = await api.readFile(this.root, path);
+      this.savedText.set(path, text);
       this.editor.load(path, text);
     }
     if (!this.openFiles.includes(path)) this.openFiles = [...this.openFiles, path];
@@ -349,8 +410,11 @@ class AppState {
 
   async save(path: string) {
     if (!this.root || !this.dirty[path]) return;
-    await api.writeFile(this.root, path, this.editor.content(path));
+    const content = this.editor.content(path);
+    this.savedText.set(path, content);
+    await api.writeFile(this.root, path, content);
     this.editor.markSaved(path);
+    delete this.conflicts[path];
     if (path === SNIPPETS_FILE) await this.loadUserSnippets();
     if (path === this.settings.main) await this.refreshMacros();
   }

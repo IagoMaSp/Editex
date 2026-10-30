@@ -1,8 +1,10 @@
+mod acp;
 mod compile;
 mod log_parser;
 mod platform;
 mod lsp;
 mod project;
+mod pty;
 mod search;
 mod spell;
 mod synctex;
@@ -18,6 +20,8 @@ pub fn run() {
         .manage(lsp::LspState::default())
         .manage(spell::SpellState::default())
         .manage(project::WatcherState::default())
+        .manage(pty::PtyState::default())
+        .manage(acp::AcpState::default())
         .invoke_handler(tauri::generate_handler![
             project::initial_project,
             project::list_files,
@@ -44,6 +48,13 @@ pub fn run() {
             spell::spell_check,
             spell::spell_suggest,
             spell::spell_add_word,
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
+            acp::acp_spawn,
+            acp::acp_send,
+            acp::acp_kill,
             synctex::synctex_forward,
             synctex::synctex_inverse,
         ])

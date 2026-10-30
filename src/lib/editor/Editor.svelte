@@ -48,6 +48,14 @@
     </div>
   {/each}
 </div>
+{#if app.active && app.conflicts[app.active]}
+  {@const path = app.active}
+  <div class="conflict">
+    <span><strong>{basename(path)}</strong> cambió en disco (¿un agente de IA u otro programa?) y aquí tienes cambios sin guardar.</span>
+    <button onclick={() => app.resolveConflict(path, "disk")}>Usar la versión del disco</button>
+    <button onclick={() => app.resolveConflict(path, "mine")}>Mantener la mía</button>
+  </div>
+{/if}
 <div class="host" bind:this={host} class:hidden={!app.active}></div>
 {#if !app.active}
   <div class="placeholder">Abre un archivo del panel izquierdo</div>
@@ -109,6 +117,23 @@
   }
   .close:hover {
     opacity: 1;
+  }
+  .conflict {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 12px;
+    font-size: 13px;
+    background: var(--warning-line);
+    border-bottom: 1px solid var(--border);
+  }
+  .conflict span {
+    flex: 1;
+  }
+  .conflict button {
+    font-size: 12px;
+    padding: 3px 10px;
   }
   .host {
     flex: 1;

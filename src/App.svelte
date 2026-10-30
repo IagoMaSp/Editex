@@ -11,6 +11,8 @@
   import Problems from "./lib/panels/Problems.svelte";
   import Settings from "./lib/Settings.svelte";
   import TexNotice from "./lib/TexNotice.svelte";
+  import AiPanel from "./lib/ai/AiPanel.svelte";
+  import { loadAgents } from "./lib/ai/agents";
   import type { TexInfo } from "./lib/api";
   import SearchPanel from "./lib/panels/SearchPanel.svelte";
   import CommandPalette, { type PaletteItem } from "./lib/CommandPalette.svelte";
@@ -24,6 +26,7 @@
 
   let sidebarWidth = $state(Number(localStorage.getItem("editex.sidebar")) || 240);
   let pdfWidth = $state(Number(localStorage.getItem("editex.pdf")) || 46);
+  let aiWidth = $state(Number(localStorage.getItem("editex.aiWidth")) || 380);
   let main = $state<HTMLDivElement>();
   const ui = app.ui;
   let texInfo = $state<TexInfo | null>(null);
@@ -62,13 +65,18 @@
     );
   }
 
-  function drag(kind: "sidebar" | "pdf") {
+  function drag(kind: "sidebar" | "pdf" | "ai") {
     return (e: PointerEvent) => {
       e.preventDefault();
       const rect = main!.getBoundingClientRect();
       const move = (ev: PointerEvent) => {
         if (kind === "sidebar") sidebarWidth = Math.min(480, Math.max(160, ev.clientX - rect.left));
-        else pdfWidth = Math.min(75, Math.max(20, ((rect.right - ev.clientX) / rect.width) * 100));
+        else if (kind === "ai") aiWidth = Math.min(800, Math.max(280, rect.right - ev.clientX));
+        else {
+          // El PDF se mide sin contar el panel de IA, que está a su derecha.
+          const right = rect.right - (ui.ai ? aiWidth : 0);
+          pdfWidth = Math.min(75, Math.max(20, ((right - ev.clientX) / rect.width) * 100));
+        }
       };
       const up = () => {
         window.removeEventListener("pointermove", move);
@@ -76,6 +84,7 @@
         document.body.classList.remove("dragging");
         localStorage.setItem("editex.sidebar", String(sidebarWidth));
         localStorage.setItem("editex.pdf", String(pdfWidth));
+        localStorage.setItem("editex.aiWidth", String(aiWidth));
       };
       document.body.classList.add("dragging");
       window.addEventListener("pointermove", move);
@@ -129,6 +138,10 @@
       c(`${app.settings.mathPreview ? "Desactivar" : "Activar"} vista previa de fórmulas`, () => setSetting("mathPreview", !app.settings.mathPreview)),
       c("Ir al siguiente error", () => app.nextProblem(1), "F8"),
       c("Ir al error anterior", () => app.nextProblem(-1), "Shift+F8"),
+      c(`${ui.ai ? "Cerrar" : "Abrir"} panel de IA`, () => (ui.ai = !ui.ai), kbd("Ctrl+Shift+A")),
+      c("Abrir terminal", () => app.openTerminal(), kbd("Ctrl+`")),
+      ...loadAgents().map((a) => c(`Abrir ${a.name} en la terminal`, () => app.openTerminal(a.terminalCommand))),
+      c("Arreglar errores con IA", () => app.askAi("Corrige los errores de la última compilación. Explica brevemente qué cambiaste.", true)),
       c("Ajustes del proyecto", () => (ui.settings = true)),
       c("Abrir carpeta…", openFolder, kbd("Ctrl+O")),
       c("Importar ZIP de Overleaf…", importZip),
@@ -223,6 +236,17 @@
       ui.palette = e.shiftKey ? "commands" : "files";
       return;
     }
+    if (key === "a" && e.shiftKey) {
+      e.preventDefault();
+      ui.ai = !ui.ai;
+      return;
+    }
+    if (e.key === "`" || e.code === "Backquote") {
+      e.preventDefault();
+      if (ui.problems && ui.bottomTab === "terminal") ui.problems = false;
+      else void app.openTerminal();
+      return;
+    }
     if (key === "f" && e.shiftKey) {
       e.preventDefault();
       openSearch();
@@ -294,6 +318,7 @@
         ⚠{#if errors}<span class="count">{errors}</span>{/if}
       </button>
       <button class="icon" class:on={ui.pdf} title="Vista previa PDF" onclick={() => (ui.pdf = !ui.pdf)}>▤</button>
+      <button class="icon ai-btn" class:on={ui.ai} title="Asistente de IA ({kbd('Ctrl+Shift+A')})" onclick={() => (ui.ai = !ui.ai)}>✦</button>
       <button class="icon" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
       <button class="icon" class:on={ui.settings} title="Ajustes" onclick={() => (ui.settings = !ui.settings)}>⚙</button>
     </header>
@@ -316,14 +341,19 @@
       {/if}
       <section class="center">
         <div class="editor"><Editor /></div>
-        {#if ui.problems}
-          <div class="problems"><Problems onclose={() => (ui.problems = false)} /></div>
+        {#if ui.problems || ui.terminalStarted}
+          <div class="problems" class:closed={!ui.problems}><Problems onclose={() => (ui.problems = false)} /></div>
         {/if}
       </section>
       {#if ui.pdf}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="split" onpointerdown={drag("pdf")}></div>
         <section class="pdf" style="width:{pdfWidth}%"><PdfViewer /></section>
+      {/if}
+      {#if ui.ai}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="split" onpointerdown={drag("ai")}></div>
+        <section class="aipanel" style="width:{aiWidth}px"><AiPanel onclose={() => (ui.ai = false)} /></section>
       {/if}
     </div>
 
@@ -578,6 +608,16 @@
     height: 32%;
     min-height: 120px;
     border-top: 1px solid var(--border);
+  }
+  .aipanel {
+    flex: none;
+    min-width: 0;
+  }
+  .ai-btn {
+    color: var(--accent);
+  }
+  .problems.closed {
+    display: none;
   }
   .pdf {
     flex: none;

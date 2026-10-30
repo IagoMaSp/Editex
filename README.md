@@ -54,6 +54,17 @@ pnpm tauri build                     # AppImage / .deb / .rpm
 - Visor PDF con renderizado bajo demanda, zoom, modo oscuro, SyncTeX (Ctrl+clic en PDF → código, Ctrl+J → PDF).
 - Esquema del documento, importar/exportar ZIP de Overleaf, compilar al guardar o al dejar de escribir.
 
+## Asistente de IA
+
+Editex se integra con agentes de IA que trabajan sobre los archivos del proyecto, usando **tu propia cuenta** (la misma sesión que en la terminal):
+
+- **Panel de IA** (✦ o Ctrl+Shift+A): chat con Claude Code o Codex mediante el [Agent Client Protocol](https://agentclientprotocol.com). Muestra el razonamiento, el plan, cada archivo que lee y los cambios como diff; pide permiso antes de editar. Los cambios en archivos abiertos se aplican en el editor y **Ctrl+Z los deshace**. Puedes adjuntar el archivo actual, la selección y los errores de compilación. En *Problemas* hay un botón **Arreglar con IA**.
+- **Terminal integrada** (Ctrl+`): una terminal real en la carpeta del proyecto, con botones para lanzar `claude` o `codex` directamente.
+
+Requisitos: [Node.js](https://nodejs.org) (el adaptador ACP se descarga con `npx` la primera vez) y haber iniciado sesión en el agente (`claude` → `/login`, o `codex login`). Con ⚙ en el panel se pueden añadir otros agentes compatibles con ACP (p. ej. Gemini CLI).
+
+Si un agente modifica en disco un archivo que tienes abierto con cambios sin guardar, Editex avisa y te deja elegir qué versión conservar.
+
 ## Atajos
 
 | Atajo | Acción |
@@ -63,6 +74,8 @@ pnpm tauri build                     # AppImage / .deb / .rpm
 | Ctrl+Shift+Enter | Compilación completa |
 | Ctrl+J | Ir a la posición en el PDF |
 | Ctrl+clic en PDF | Ir a la línea en el código |
+| Ctrl+Shift+A | Panel de IA |
+| Ctrl+` | Terminal integrada |
 
 ## Caché de figuras TikZ
 
