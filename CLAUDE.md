@@ -76,3 +76,7 @@ Cada módulo expone `#[tauri::command]`s registrados en `lib.rs`. El frontend tr
 - Directorio `.editex/` dentro de cada proyecto del usuario: build, fast, settings. Está en `.gitignore` y se excluye del árbol y del ZIP exportado.
 - Linux primero (Hyprland/Wayland); mantener el código portable (`#[cfg(unix)]` donde haga falta) para Windows/macOS más adelante.
 - `examples/tesis/` es el proyecto de prueba (capítulos con `\include`, TikZ, pgfplots, biblatex).
+
+## Releases
+- Versión en tres sitios (`package.json`, `tauri.conf.json`, `Cargo.toml`): cambiarla con `scripts/bump-version.sh X.Y.Z`; luego etiquetar `main` con `vX.Y.Z` y `build.yml` crea el borrador de release.
+- `.github/workflows/ci.yml`: `pnpm check`, `pnpm build` y `cargo test` en cada pull request (build.yml no corre en PRs).
