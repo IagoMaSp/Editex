@@ -1,88 +1,179 @@
+/*
+ * Sistema de diseño de Editex: herramienta técnica, densa y sobria (línea Linear/Zed/VS Code).
+ *
+ * Directivas (anti-ui-slop):
+ *   - Nada de degradados decorativos (en especial violetas/«IA genérica»). Superficies planas.
+ *   - Radios pequeños: como mucho --radius-lg (8px). Nada de 12px+ ni píldoras salvo indicadores redondos.
+ *   - Sombras solo en capas flotantes (menús, paleta, diálogos) y cortas: --shadow-popover. Sin halos difusos.
+ *   - Un único acento (--accent) y solo con función: foco, selección, estado activo, acción primaria.
+ *     El color semántico (danger/warning/ok) es para estados, nunca para decorar.
+ *   - Jerarquía por superficie + borde de 1px, no por sombras ni colores.
+ *   - Texto: contrastes medidos (WCAG) sobre --bg-surface, anotados junto a cada token.
+ *   - Componentes: usar tokens, nunca hex sueltos.
+ */
+
 :root {
+  /* ── Tipografía ─────────────────────────────────────────────── */
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", "Cantarell", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --font-serif: "Latin Modern Roman", "CMU Serif", Georgia, serif;
+
+  /* Escala compacta para UI de productividad (11–14px). El editor tiene la suya. */
+  --fs-xs: 11px; /* badges, contadores, atajos de teclado */
+  --fs-sm: 12px; /* metadatos, cabeceras de panel, barra de estado */
+  --fs-base: 13px; /* texto de UI por defecto: árbol, listas, menús, controles */
+  --fs-md: 14px; /* títulos de diálogo, énfasis puntual */
+  --fs-display: 20px; /* solo el título de la bienvenida */
   --editor-font-size: 14.5px;
 
-  --bg: #f6f5f1;
-  --bg-panel: #fbfaf7;
-  --bg-sidebar: #f1efea;
-  --bg-editor: #ffffff;
-  --bg-pdf: #e7e5df;
-  --bg-hover: #e9e6df;
-  --bg-selected: #dfe9e5;
-  --border: #e0ddd5;
-  --border-strong: #c9c5bb;
-  --text: #2d2b27;
-  --text-strong: #15140f;
-  --text-muted: #6e6a61;
-  --text-faint: #a29d92;
-  --accent: #2f6f5e;
-  --accent-text: #ffffff;
-  --accent-soft: #d6e7e0;
+  --lh-tight: 1.25; /* filas de una línea */
+  --lh-base: 1.45; /* párrafos (chat, explicaciones) */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* ── Medidas ────────────────────────────────────────────────── */
+  --h-bar: 36px; /* barra superior / toolbar principal */
+  --h-header: 32px; /* cabeceras de panel, pestañas, barra de estado */
+  --h-control: 26px; /* botones e inputs */
+  --h-row: 24px; /* filas de árbol, listas, resultados */
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  --radius-sm: 3px; /* badges, chips, kbd */
+  --radius: 4px; /* botones, inputs, filas */
+  --radius-lg: 8px; /* máximo: menús, paleta, diálogos */
+
+  --duration-fast: 80ms;
+  --duration: 140ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ── Color: modo claro ──────────────────────────────────────── */
+  --bg-base: #f3f3f4; /* fondo de la ventana, zonas vacías */
+  --bg-surface: #fbfbfb; /* paneles, editor */
+  --bg-elevated: #ffffff; /* menús, paleta, diálogos, tooltips */
+  --bg-inset: #ffffff; /* campos de texto */
+  --bg-hover: rgb(0 0 0 / 0.045);
+  --bg-active: rgb(0 0 0 / 0.08);
+
+  --border-subtle: #e4e4e7;
+  --border-strong: #cfd0d4;
+
+  --text-primary: #1b1c1f; /* 16.5:1 */
+  --text-strong: #0b0c0e;
+  --text-secondary: #55585f; /* 6.9:1 */
+  --text-muted: #6b6e76; /* 4.9:1 */
+
+  --accent: #22735f; /* 5.5:1 */
+  --accent-hover: #1c6452;
+  --accent-text: #ffffff; /* 5.7:1 sobre --accent */
+  --accent-soft: rgb(34 115 95 / 0.12);
+  --focus-ring: #22735f;
+
   --danger: #c4413a;
-  --warning: #c98a12;
-  --ok: #2f8f5e;
+  --warning: #8f620a;
+  --ok: #2b7d55;
+
+  --bg-pdf: #e4e4e6;
   --spell: #d9534f;
-  --selection: #cfe3dc;
-  --selection-match: #e6efe9;
+  --selection: rgb(34 115 95 / 0.2);
+  --selection-match: rgb(34 115 95 / 0.1);
   --search-match: #ffe08a;
-  --active-line: #f7f6f2;
+  --active-line: rgb(0 0 0 / 0.025);
   --error-line: #fbe9e7;
   --warning-line: #fdf4e0;
-  --shadow: 0 10px 30px rgb(30 25 15 / 0.12), 0 2px 6px rgb(30 25 15 / 0.08);
-  --page-shadow: 0 1px 3px rgb(0 0 0 / 0.15), 0 4px 14px rgb(0 0 0 / 0.08);
 
-  --syn-command: #2f6f5e;
-  --syn-math: #9a4dbb;
-  --syn-arg: #b0612b;
-  --syn-number: #b0612b;
-  --syn-bracket: #6e6a61;
-  --syn-comment: #9a958a;
+  --scrollbar-thumb: rgb(0 0 0 / 0.16);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 0.3);
+
+  --shadow-popover: 0 4px 12px rgb(0 0 0 / 0.1), 0 0 0 1px rgb(0 0 0 / 0.04);
+  --overlay: rgb(0 0 0 / 0.2); /* velo bajo diálogos modales */
+  --page-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+
+  --syn-command: #22735f;
+  --syn-math: #8a46a8;
+  --syn-arg: #a85a24;
+  --syn-number: #a85a24;
+  --syn-bracket: #6b6e76;
+  --syn-comment: #8b8e95;
 
   color-scheme: light;
 }
 
 /* El tema lo fija lib/theme.svelte.ts (claro, oscuro o el del sistema). */
 :root[data-theme="dark"] {
-  --bg: #17181a;
-  --bg-panel: #1d1f22;
-  --bg-sidebar: #1a1c1f;
-  --bg-editor: #1f2124;
-  --bg-pdf: #141517;
-  --bg-hover: #2a2d31;
-  --bg-selected: #23383a;
-  --border: #2e3135;
-  --border-strong: #45494f;
-  --text: #d7d5cf;
-  --text-strong: #f1efe9;
-  --text-muted: #9a978f;
-  --text-faint: #66645e;
-  --accent: #5fb49a;
-  --accent-text: #0f1a16;
-  --accent-soft: #1d3530;
-  --danger: #ef6b62;
-  --warning: #e3a93a;
-  --ok: #5fb49a;
-  --spell: #ef6b62;
-  --selection: #2c4a42;
-  --selection-match: #29342f;
+  /* Neutros fríos casi sin tinte: el contenido (código, PDF) es lo que debe destacar. */
+  --bg-base: #111214;
+  --bg-surface: #17181b;
+  --bg-elevated: #1e1f23;
+  --bg-inset: #131417;
+  --bg-hover: rgb(255 255 255 / 0.05);
+  --bg-active: rgb(255 255 255 / 0.09);
+
+  --border-subtle: #26282c;
+  --border-strong: #363940;
+
+  --text-primary: #e4e5e7; /* 14.1:1 */
+  --text-strong: #f6f6f7;
+  --text-secondary: #a1a3a9; /* 7.0:1 */
+  --text-muted: #83868e; /* 4.8:1 */
+
+  --accent: #4fb39a; /* 7.0:1 */
+  --accent-hover: #63c2aa;
+  --accent-text: #0c1814; /* 7.1:1 sobre --accent */
+  --accent-soft: rgb(79 179 154 / 0.14);
+  --focus-ring: #4fb39a;
+
+  --danger: #f07167;
+  --warning: #e0a43c;
+  --ok: #4fb39a;
+
+  --bg-pdf: #0d0e10;
+  --spell: #f07167;
+  --selection: rgb(79 179 154 / 0.24);
+  --selection-match: rgb(79 179 154 / 0.12);
   --search-match: #6b5a1c;
-  --active-line: #24272b;
-  --error-line: #3a2422;
-  --warning-line: #362d1b;
-  --shadow: 0 10px 30px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
-  --page-shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+  --active-line: rgb(255 255 255 / 0.03);
+  --error-line: rgb(240 113 103 / 0.12);
+  --warning-line: rgb(224 164 60 / 0.1);
+
+  --scrollbar-thumb: rgb(255 255 255 / 0.12);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 0.24);
+
+  --shadow-popover: 0 4px 12px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --overlay: rgb(0 0 0 / 0.45);
+  --page-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
 
   --syn-command: #6cc4a8;
   --syn-math: #c792ea;
   --syn-arg: #e2a26b;
   --syn-number: #e2a26b;
-  --syn-bracket: #8d8a82;
-  --syn-comment: #6d6b65;
+  --syn-bracket: #8b8e95;
+  --syn-comment: #6c6f76;
 
   color-scheme: dark;
 }
+
+/*
+ * Alias de los nombres anteriores, para que los componentes sigan funcionando mientras se migran.
+ * En código nuevo, usar los tokens de arriba.
+ */
+:root {
+  --bg: var(--bg-base);
+  --bg-panel: var(--bg-surface);
+  --bg-sidebar: var(--bg-surface);
+  --bg-editor: var(--bg-surface);
+  --bg-selected: var(--accent-soft);
+  --border: var(--border-subtle);
+  --text: var(--text-primary);
+  --shadow: var(--shadow-popover);
+}
+
+/* ── Base ─────────────────────────────────────────────────────── */
 
 * {
   box-sizing: border-box;
@@ -93,10 +184,13 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.4 var(--font-ui);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: var(--lh-tight);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01"; /* Inter: dígitos y «a» más legibles en tamaños pequeños */
 }
 
 body.dragging {
@@ -104,17 +198,45 @@ body.dragging {
   user-select: none;
 }
 
+::selection {
+  background: var(--selection);
+}
+
+:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+kbd {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  padding: 1px 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Botones ──────────────────────────────────────────────────── */
+
 button {
   font: inherit;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  min-height: var(--h-control);
+  padding: 0 var(--space-3);
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 button:hover {
   background: var(--bg-hover);
+}
+button:active {
+  background: var(--bg-active);
 }
 button:disabled {
   opacity: 0.5;
@@ -124,69 +246,121 @@ button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
-  font-weight: 600;
+  font-weight: var(--fw-medium);
 }
 button.primary:hover {
-  filter: brightness(1.08);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 button.icon {
   border: none;
   background: none;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
   padding: 0;
-  border-radius: 6px;
-  color: var(--text-muted);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-button.icon:hover,
-button.icon.on {
+button.icon:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+button.icon.on {
+  background: var(--bg-active);
   color: var(--text-strong);
 }
 button.ghost {
   border: none;
   background: none;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+}
+button.ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 button.link {
   border: none;
   background: none;
+  min-height: 0;
   padding: 0;
   text-align: left;
 }
 
+/* ── Campos ───────────────────────────────────────────────────── */
+
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0 var(--space-2);
+}
 input,
 select {
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--bg-editor);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 8px;
+  height: var(--h-control);
 }
-input[type="checkbox"] {
+textarea {
+  padding: var(--space-1) var(--space-2);
+  line-height: var(--lh-base);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  height: auto;
   accent-color: var(--accent);
 }
 input:focus,
-select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
+/* ── Scrollbars ───────────────────────────────────────────────── */
+/* Finas, sin carril, el pulgar solo se intensifica al pasar el ratón. */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 5px;
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 24px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }

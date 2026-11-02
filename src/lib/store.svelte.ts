@@ -75,7 +75,9 @@ class AppState {
   /** Estado de la interfaz que también controla la paleta de comandos. */
   ui = $state({
     sidebar: true,
-    sideTab: "files" as "files" | "outline" | "search",
+    sideTab: "files" as "files" | "outline",
+    /** Sección de búsqueda desplegada al pie del panel lateral. */
+    search: false,
     pdf: true,
     problems: false,
     settings: false,

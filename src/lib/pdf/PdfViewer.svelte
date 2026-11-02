@@ -271,7 +271,7 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg-panel);
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
   .spacer {
     flex: 1;
@@ -334,7 +334,7 @@
   }
   .empty {
     margin-top: 30%;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 14px;
   }
 </style>

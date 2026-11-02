@@ -1,10 +1,14 @@
 <script lang="ts" module>
+  import type { IconName } from "./Icon.svelte";
+
   export interface PaletteItem {
     label: string;
     /** Texto secundario (ruta, atajo...). */
     detail?: string;
-    /** Icono o etiqueta corta a la izquierda. */
-    kind?: string;
+    /** Icono a la izquierda. */
+    icon?: IconName;
+    /** Atajo de teclado (p. ej. el que devuelve `kbd()`). */
+    shortcut?: string;
     run: () => void | Promise<void>;
   }
 
@@ -37,6 +41,7 @@
 
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import Icon from "./Icon.svelte";
 
   let { items, placeholder, onclose }: { items: PaletteItem[]; placeholder: string; onclose: () => void } = $props();
 
@@ -44,6 +49,7 @@
   let selected = $state(0);
   let input: HTMLInputElement;
   let list = $state<HTMLDivElement>();
+  const PAGE = 8;
 
   const filtered = $derived.by(() => {
     if (!query.trim()) return items.slice(0, 60);
@@ -62,21 +68,36 @@
 
   onMount(() => input.focus());
 
+  /** «Ctrl+Shift+P» → [Ctrl, Shift, P]; «⌘⇧P» → [⌘, ⇧, P]. */
+  function keys(shortcut: string): string[] {
+    if (shortcut.length > 1 && shortcut.includes("+")) return shortcut.split("+");
+    return shortcut.match(/[⌘⇧⌥⌃]|[^⌘⇧⌥⌃]+/g) ?? [shortcut];
+  }
+
   async function choose(item: PaletteItem | undefined) {
     if (!item) return;
     onclose();
     await item.run();
   }
 
+  async function move(to: number) {
+    const n = filtered.length;
+    if (!n) return;
+    selected = Math.max(0, Math.min(n - 1, to));
+    await tick();
+    list?.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
+  }
+
   async function onKey(e: KeyboardEvent) {
+    const n = filtered.length;
     if (e.key === "Escape") onclose();
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const n = filtered.length;
-      if (!n) return;
-      selected = (selected + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
-      await tick();
-      list?.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
+      // Las flechas dan la vuelta; Re Pág / Av Pág se paran en los extremos.
+      if (n) await move((selected + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+    } else if (e.key === "PageDown" || e.key === "PageUp") {
+      e.preventDefault();
+      await move(selected + (e.key === "PageDown" ? PAGE : -PAGE));
     } else if (e.key === "Enter") {
       e.preventDefault();
       await choose(filtered[selected]);
@@ -87,17 +108,48 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={onclose}>
   <div class="palette" role="dialog" tabindex="-1" aria-label={placeholder} onclick={(e) => e.stopPropagation()}>
-    <input bind:this={input} bind:value={query} {placeholder} onkeydown={onKey} />
-    <div class="list" bind:this={list}>
+    <div class="search">
+      <Icon name="search" size={14} />
+      <input
+        bind:this={input}
+        bind:value={query}
+        {placeholder}
+        onkeydown={onKey}
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="palette-list"
+        aria-activedescendant={filtered.length ? `palette-opt-${selected}` : undefined}
+        aria-autocomplete="list"
+        spellcheck="false"
+      />
+    </div>
+    <div class="list" id="palette-list" role="listbox" bind:this={list}>
       {#each filtered as item, i (item.label + (item.detail ?? "") + i)}
-        <button class:sel={i === selected} onmouseenter={() => (selected = i)} onclick={() => choose(item)}>
-          {#if item.kind}<span class="kind">{item.kind}</span>{/if}
+        <!-- Selección con el ratón solo si se mueve: al desplazar con el teclado la lista pasa bajo el puntero. -->
+        <button
+          id="palette-opt-{i}"
+          role="option"
+          aria-selected={i === selected}
+          tabindex="-1"
+          class:sel={i === selected}
+          onpointermove={() => (selected = i)}
+          onclick={() => choose(item)}
+        >
+          {#if item.icon}<span class="ic"><Icon name={item.icon} size={14} /></span>{/if}
           <span class="label">{item.label}</span>
           {#if item.detail}<span class="detail">{item.detail}</span>{/if}
+          {#if item.shortcut}
+            <span class="keys">{#each keys(item.shortcut) as k, j (j)}<kbd>{k}</kbd>{/each}</span>
+          {/if}
         </button>
       {:else}
         <p class="empty">Sin resultados</p>
       {/each}
+    </div>
+    <div class="foot" aria-hidden="true">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+      <span><kbd>↵</kbd> abrir</span>
+      <span><kbd>Esc</kbd> cerrar</span>
     </div>
   </div>
 </div>
@@ -107,80 +159,143 @@
     position: fixed;
     inset: 0;
     z-index: 80;
-    background: rgb(0 0 0 / 0.15);
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding-top: 12vh;
+    padding-top: 14vh;
+    background: var(--overlay);
+    backdrop-filter: blur(4px);
   }
   .palette {
-    width: min(620px, 90vw);
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: var(--shadow);
-    overflow: hidden;
+    width: min(600px, 90vw);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-popover);
   }
-  input {
+
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 40px;
+    padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+  }
+  .search input,
+  .search input:focus {
+    flex: 1;
+    height: 100%;
+    padding: 0;
     border: none;
-    border-bottom: 1px solid var(--border);
     border-radius: 0;
-    padding: 12px 16px;
-    font-size: 15px;
-    background: transparent;
-  }
-  input:focus {
     outline: none;
+    box-shadow: none;
+    background: none;
+    font-size: var(--fs-md);
+    color: var(--text-primary);
   }
+
   .list {
-    max-height: 50vh;
+    max-height: min(50vh, 420px);
     overflow: auto;
-    padding: 4px;
+    padding: var(--space-1);
   }
   button {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2);
     width: 100%;
+    height: 28px;
+    min-height: 0;
+    padding: 0 var(--space-2);
     border: none;
+    border-radius: var(--radius);
     background: none;
-    border-radius: 6px;
-    padding: 7px 12px;
     text-align: left;
-    font-size: 13.5px;
+    font-size: var(--fs-base);
+    color: var(--text-primary);
+    transition: none;
+  }
+  button:hover {
+    background: none;
   }
   button.sel {
-    background: var(--accent);
-    color: var(--accent-text);
+    background: var(--bg-active);
+    color: var(--text-strong);
   }
-  .kind {
+  .ic {
     flex: none;
-    width: 18px;
-    text-align: center;
-    font-size: 11px;
-    font-weight: 700;
-    opacity: 0.6;
+    display: flex;
+    color: var(--text-muted);
+  }
+  .sel .ic {
+    color: var(--text-secondary);
   }
   .label {
-    white-space: nowrap;
+    flex: none;
+    max-width: 70%;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .detail {
-    margin-left: auto;
-    padding-left: 12px;
-    font-size: 12px;
-    opacity: 0.6;
-    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex-shrink: 1;
+    white-space: nowrap;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  .keys {
+    flex: none;
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+  }
+  kbd {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 var(--space-1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-hover);
+    font: var(--fs-xs) / 1 var(--font-mono);
+    color: var(--text-secondary);
   }
   .empty {
-    padding: 8px 12px;
-    color: var(--text-faint);
-    font-size: 13px;
+    margin: 0;
+    padding: var(--space-2);
+    font-size: var(--fs-base);
+    color: var(--text-muted);
+  }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    height: var(--h-row);
+    padding: 0 var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+  .foot span {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .foot kbd {
+    min-width: 16px;
+    height: 16px;
+    margin-right: 2px;
   }
 </style>

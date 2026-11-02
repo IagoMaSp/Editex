@@ -7,6 +7,7 @@
   import { DEFAULT_AGENTS, loadAgents, saveAgents, selectAgent, selectedAgentId, type AgentConfig } from "./agents";
   import { renderMarkdown } from "./markdown";
   import DiffView from "./DiffView.svelte";
+  import Icon, { type IconName } from "../Icon.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -45,17 +46,17 @@
     "Explica qué hace el preámbulo de main.tex",
   ];
 
-  const ICONS: Record<string, string> = {
-    read: "📖",
-    edit: "✎",
-    delete: "🗑",
-    move: "↦",
-    search: "🔍",
-    execute: "▶",
-    think: "💭",
-    fetch: "🌐",
-    switch_mode: "⇄",
-    other: "•",
+  const ICONS: Record<string, IconName> = {
+    read: "fileText",
+    edit: "pencil",
+    delete: "trash",
+    move: "arrowRight",
+    search: "search",
+    execute: "terminal",
+    think: "sparkle",
+    fetch: "globe",
+    switch_mode: "swap",
+    other: "chevron",
   };
 
   // Desplaza al final cuando llega contenido nuevo, si ya se estaba al final.
@@ -170,18 +171,20 @@
 
 <div class="ai">
   <div class="head">
-    <span class="title">✦ IA</span>
+    <span class="title"><Icon name="sparkle" size={14} /> IA</span>
     <select bind:value={agentId} disabled={ai.status === "connecting" || ai.status === "busy"} onchange={() => selectAgent(agentId)}>
       {#each agents as a (a.id)}<option value={a.id}>{a.name}</option>{/each}
     </select>
-    <span class="status {ai.status}" title={statusLabel()}>●</span>
+    <span class="status {ai.status}" title={statusLabel()} role="status" aria-label={statusLabel()}></span>
     <div class="spacer"></div>
     {#if connected}
-      <button class="icon" title="Nueva conversación" onclick={() => ai.newChat()}>＋</button>
-      <button class="icon" title="Desconectar" onclick={() => ai.disconnect()}>⏻</button>
+      <button class="icon" title="Nueva conversación" aria-label="Nueva conversación" onclick={() => ai.newChat()}><Icon name="plus" size={14} /></button>
+      <button class="icon" title="Desconectar" aria-label="Desconectar" onclick={() => ai.disconnect()}><Icon name="power" size={14} /></button>
     {/if}
-    <button class="icon" title="Configurar agentes" onclick={editAgents}>⚙</button>
-    <button class="icon" title="Cerrar panel" onclick={onclose}>✕</button>
+    <button class="icon" class:on={editingAgents} title="Configurar agentes" aria-label="Configurar agentes" onclick={editAgents}>
+      <Icon name="sliders" size={14} />
+    </button>
+    <button class="icon" title="Cerrar panel" aria-label="Cerrar panel" onclick={onclose}><Icon name="x" size={14} /></button>
   </div>
 
   {#if connected && ai.modes.length > 1}
@@ -225,7 +228,7 @@
             <button class="link" onclick={() => app.openTerminal(agent?.terminalCommand)}>Abrir {agent?.terminalCommand} en la terminal</button>
           </p>
         {:else if ai.status === "connecting"}
-          <p><span class="spin"></span> Iniciando {agent?.name}… {elapsed > 3 ? `${elapsed} s` : ""}</p>
+          <p class="connecting"><span class="spin"></span> Iniciando {agent?.name}… {elapsed > 3 ? `${elapsed} s` : ""}</p>
           {#if elapsed > 8}
             <p class="small">
               La primera vez se descarga el adaptador y el motor de {agent?.name} (unos 270 MB): puede tardar un par de
@@ -234,10 +237,12 @@
           {/if}
           <button onclick={() => ai.disconnect()}>Cancelar</button>
         {:else}
-          <p>¿Qué quieres hacer?</p>
-          {#each SUGGESTIONS as s (s)}
-            <button class="suggestion" onclick={() => send(s)}>{s}</button>
-          {/each}
+          <p class="label">Sugerencias</p>
+          <div class="suggestions">
+            {#each SUGGESTIONS as s (s)}
+              <button class="suggestion" onclick={() => send(s)}><Icon name="arrowRight" size={12} />{s}</button>
+            {/each}
+          </div>
         {/if}
       </div>
     {/if}
@@ -245,22 +250,28 @@
     {#each ai.items as item (itemKey(item))}
       {#if item.kind === "user"}
         <div class="user">
-          {#if item.context.length}
-            <div class="chips">{#each item.context as c (c)}<span class="chip">{c}</span>{/each}</div>
-          {/if}
-          {item.text}
+          <div class="who">
+            Tú
+            {#each item.context as c (c)}<span class="chip">{c}</span>{/each}
+          </div>
+          <div class="user-text">{item.text}</div>
         </div>
       {:else if item.kind === "agent"}
         <div class="agent md">{@html renderMarkdown(item.text)}</div>
       {:else if item.kind === "thought"}
-        <details class="thought"><summary>Razonamiento</summary><div class="md">{@html renderMarkdown(item.text)}</div></details>
+        <details class="fold thought">
+          <summary><Icon name="chevron" size={12} />Razonamiento</summary>
+          <div class="md">{@html renderMarkdown(item.text)}</div>
+        </details>
       {:else if item.kind === "tool"}
         <div class="tool {item.status}">
           <div class="tool-head">
-            <span class="ic">{ICONS[item.toolKind ?? "other"] ?? "•"}</span>
+            <span class="ic"><Icon name={ICONS[item.toolKind ?? "other"] ?? "chevron"} size={13} /></span>
             <span class="tool-title">{item.title}</span>
-            <span class="tool-status">
-              {item.status === "completed" ? "✓" : item.status === "failed" ? "✕" : item.status === "in_progress" ? "…" : ""}
+            <span class="tool-status" title={item.status}>
+              {#if item.status === "completed"}<Icon name="check" size={13} />
+              {:else if item.status === "failed"}<Icon name="x" size={13} />
+              {:else if item.status === "in_progress"}<span class="spin"></span>{/if}
             </span>
           </div>
           {#each item.locations.filter((l) => !item.content.some((c) => c.type === "diff")) as loc, i (i)}
@@ -270,19 +281,22 @@
           {/each}
           {#each item.content as c, i (i)}
             {#if c.type === "diff" && ai.permission?.request.toolCall.toolCallId !== item.toolCallId}
-              <DiffView path={c.path} oldText={c.oldText} newText={c.newText} />
+              <div class="tool-body"><DiffView path={c.path} oldText={c.oldText} newText={c.newText} /></div>
             {:else if c.type === "content" && c.content.type === "text" && c.content.text.trim()}
-              <details class="tool-out"><summary>Resultado</summary><pre>{c.content.text}</pre></details>
+              <details class="fold tool-out">
+                <summary><Icon name="chevron" size={12} />Resultado</summary>
+                <pre>{c.content.text}</pre>
+              </details>
             {/if}
           {/each}
         </div>
       {:else if item.kind === "plan"}
         <div class="plan">
-          <div class="plan-title">Plan</div>
+          <div class="block-head">Plan</div>
           {#each item.entries as e, i (i)}
             <div class="plan-entry {e.status}">
-              <span>{e.status === "completed" ? "☑" : e.status === "in_progress" ? "◐" : "☐"}</span>
-              {e.content}
+              <Icon name={e.status === "completed" ? "check" : e.status === "in_progress" ? "circleDot" : "circle"} size={13} />
+              <span>{e.content}</span>
             </div>
           {/each}
         </div>
@@ -297,43 +311,51 @@
 
     {#if ai.permission}
       {@const p = ai.permission}
-      <div class="permission">
-        <div class="perm-title">{ai.agentName} quiere: <strong>{p.request.toolCall.title ?? "realizar una acción"}</strong></div>
-        {#each p.request.toolCall.content ?? [] as c, i (i)}
-          {#if c.type === "diff"}<DiffView path={c.path} oldText={c.oldText} newText={c.newText} />{/if}
-        {/each}
-        <div class="perm-options">
-          {#each p.request.options as o (o.optionId)}
-            <button
-              class:primary={o.kind === "allow_once"}
-              class:danger={o.kind.startsWith("reject")}
-              onclick={() => p.resolve(o.optionId)}>{o.name}</button
-            >
+      <div class="action">
+        <div class="block-head">Permiso</div>
+        <div class="action-body">
+          <p>{ai.agentName} quiere: <strong>{p.request.toolCall.title ?? "realizar una acción"}</strong></p>
+          {#each p.request.toolCall.content ?? [] as c, i (i)}
+            {#if c.type === "diff"}<DiffView path={c.path} oldText={c.oldText} newText={c.newText} />{/if}
           {/each}
+          <div class="row">
+            {#each p.request.options as o (o.optionId)}
+              <button
+                class:primary={o.kind === "allow_once"}
+                class:danger={o.kind.startsWith("reject")}
+                onclick={() => p.resolve(o.optionId)}>{o.name}</button
+              >
+            {/each}
+          </div>
         </div>
       </div>
     {/if}
 
     {#if ai.status === "auth"}
-      <div class="auth">
-        <p>Inicia sesión en {ai.agentName} y vuelve a intentarlo.</p>
-        <div class="row">
-          {#each ai.authMethods as m (m.id)}
-            <button onclick={() => ai.authenticate(m.id)} title={m.description ?? ""}>{m.name}</button>
-          {/each}
-          {#if agent?.loginCommand}
-            <button onclick={() => app.openTerminal(agent.loginCommand)}>Iniciar sesión en la terminal</button>
-          {/if}
-          <button class="primary" onclick={() => ai.retry()}>Reintentar</button>
+      <div class="action">
+        <div class="block-head">Inicio de sesión</div>
+        <div class="action-body">
+          <p>Inicia sesión en {ai.agentName} y vuelve a intentarlo.</p>
+          <div class="row">
+            {#each ai.authMethods as m (m.id)}
+              <button onclick={() => ai.authenticate(m.id)} title={m.description ?? ""}>{m.name}</button>
+            {/each}
+            {#if agent?.loginCommand}
+              <button onclick={() => app.openTerminal(agent.loginCommand)}>Iniciar sesión en la terminal</button>
+            {/if}
+            <button class="primary" onclick={() => ai.retry()}>Reintentar</button>
+          </div>
         </div>
       </div>
     {/if}
 
     {#if ai.edited.length}
       <div class="edited">
-        Archivos modificados:
-        {#each ai.edited as f (f)}<button class="link" onclick={() => app.openFile(f)}>{f}</button>{/each}
-        <span class="hint">({kbd("Ctrl+Z")} en el editor deshace los cambios en archivos abiertos)</span>
+        <div class="block-head">Archivos modificados</div>
+        {#each ai.edited as f (f)}
+          <button class="file" onclick={() => app.openFile(f)}><Icon name="fileText" size={12} />{f}</button>
+        {/each}
+        <p class="hint">{kbd("Ctrl+Z")} en el editor deshace los cambios en archivos abiertos.</p>
       </div>
     {/if}
 
@@ -342,8 +364,8 @@
     {/if}
 
     {#if ai.log.length && (ai.status === "connecting" || ai.status === "error" || ai.status === "auth")}
-      <details class="log" open={ai.status === "error"}>
-        <summary>Registro del agente</summary>
+      <details class="fold log" open={ai.status === "error"}>
+        <summary><Icon name="chevron" size={12} />Registro del agente</summary>
         <pre>{ai.log.slice(-40).join("\n")}</pre>
       </details>
     {/if}
@@ -353,39 +375,69 @@
     {#if app.aiAttachments.length}
       <div class="attachments">
         {#each app.aiAttachments as d, i (i)}
-          <span class="att {d.severity}" title={d.message}>
-            {d.severity === "error" ? "●" : "▲"}
-            {d.file ? d.file.split("/").pop() : "?"}{d.line ? `:${d.line}` : ""} — {d.message.slice(0, 60)}{d.message.length > 60 ? "…" : ""}
-            <button title="Quitar" onclick={() => (app.aiAttachments = app.aiAttachments.filter((_, j) => j !== i))}>✕</button>
-          </span>
+          <div class="att {d.severity}" title={d.message}>
+            <span class="sev"></span>
+            <span class="att-loc">{d.file ? d.file.split("/").pop() : "?"}{d.line ? `:${d.line}` : ""}</span>
+            <span class="att-msg">{d.message}</span>
+            <button
+              class="icon"
+              title="Quitar"
+              aria-label="Quitar"
+              onclick={() => (app.aiAttachments = app.aiAttachments.filter((_, j) => j !== i))}><Icon name="x" size={12} /></button
+            >
+          </div>
         {/each}
       </div>
     {/if}
-    <div class="ctx">
-      <label class:off={!app.active}><input type="checkbox" bind:checked={ctx.file} disabled={!app.active} /> Archivo actual</label>
-      <label class:off={!hasSelection}><input type="checkbox" bind:checked={ctx.selection} disabled={!hasSelection} /> Selección</label>
-      <label class:off={!app.diagnostics.length}>
-        <input type="checkbox" bind:checked={ctx.errors} disabled={!app.diagnostics.length} /> Todos los errores y advertencias{problemCount ? ` (${problemCount})` : ""}
-      </label>
-    </div>
     <div class="input">
       <textarea
         bind:this={textarea}
         bind:value={input}
-        rows="3"
+        rows="2"
         placeholder={app.aiAttachments.length
-          ? "¿Qué quieres hacer con estos problemas? (p. ej. «corrígelos» o «explícame qué pasa»)"
+          ? "¿Qué quieres hacer con estos problemas? (p. ej. «corrígelos»)"
           : connected
-            ? `Pide algo a ${ai.agentName}… (Enter envía, Shift+Enter salto de línea)`
+            ? `Pide algo a ${ai.agentName}…`
             : `Escribe y se conectará ${agent?.name}`}
         onkeydown={onKey}
         disabled={ai.status === "connecting"}
       ></textarea>
-      {#if ai.status === "busy"}
-        <button class="stop" title="Detener (Esc)" onclick={() => ai.cancel()}>■</button>
-      {:else}
-        <button class="primary send" title="Enviar (Enter)" disabled={!input.trim()} onclick={() => send()}>↑</button>
-      {/if}
+      <div class="toolbar">
+        <!-- Contexto que se adjunta al mensaje. -->
+        <button
+          class="toggle"
+          class:on={ctx.file && !!app.active}
+          aria-pressed={ctx.file}
+          disabled={!app.active}
+          title="Adjuntar el archivo actual"
+          onclick={() => (ctx.file = !ctx.file)}>Archivo</button
+        >
+        <button
+          class="toggle"
+          class:on={ctx.selection && hasSelection}
+          aria-pressed={ctx.selection}
+          disabled={!hasSelection}
+          title="Adjuntar la selección del editor"
+          onclick={() => (ctx.selection = !ctx.selection)}>Selección</button
+        >
+        <button
+          class="toggle"
+          class:on={ctx.errors && !!app.diagnostics.length}
+          aria-pressed={ctx.errors}
+          disabled={!app.diagnostics.length}
+          title="Adjuntar todos los errores y advertencias de la última compilación"
+          onclick={() => (ctx.errors = !ctx.errors)}>Problemas{problemCount ? ` ${problemCount}` : ""}</button
+        >
+        <div class="spacer"></div>
+        <span class="keys"><kbd>↵</kbd> enviar <kbd>⇧↵</kbd> línea</span>
+        {#if ai.status === "busy"}
+          <button class="icon stop" title="Detener (Esc)" aria-label="Detener" onclick={() => ai.cancel()}><Icon name="stop" size={12} /></button>
+        {:else}
+          <button class="icon send" title="Enviar (Enter)" aria-label="Enviar" disabled={!input.trim()} onclick={() => send()}>
+            <Icon name="arrowUp" size={14} />
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
@@ -395,422 +447,652 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-panel);
-    font-size: 13.5px;
+    background: var(--bg-surface);
+    font-size: var(--fs-base);
   }
+
+  /* ── Cabecera ───────────────────────────────────────────────── */
+
   .head {
+    flex: none;
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 36px;
-    padding: 0 8px 0 12px;
-    border-bottom: 1px solid var(--border);
-    flex: none;
+    gap: var(--space-1);
+    height: var(--h-header);
+    padding: 0 var(--space-1) 0 var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
   }
   .title {
-    font-weight: 700;
-    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-right: var(--space-1);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-primary);
   }
-  .head select {
-    font-size: 12.5px;
-    padding: 2px 6px;
+  .head select,
+  .modes select {
+    height: 22px;
+    font-size: var(--fs-sm);
+    padding: 0 var(--space-1);
+  }
+  .head button.icon {
+    width: 24px;
+    height: 24px;
   }
   .status {
-    font-size: 10px;
-    color: var(--text-faint);
+    width: 6px;
+    height: 6px;
+    margin-left: var(--space-1);
+    border-radius: 50%;
+    background: var(--text-muted);
   }
   .status.ready {
-    color: var(--ok);
+    background: var(--ok);
   }
   .status.busy,
   .status.connecting {
-    color: var(--warning);
+    background: var(--warning);
   }
   .status.error,
   .status.auth {
-    color: var(--danger);
+    background: var(--danger);
   }
   .spacer {
     flex: 1;
   }
   .modes {
+    flex: none;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    font-size: 12px;
+    gap: var(--space-2);
+    height: var(--h-control);
+    padding: 0 var(--space-3);
+    font-size: var(--fs-sm);
     color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
-  }
-  .modes select {
-    font-size: 12px;
-    padding: 2px 6px;
+    border-bottom: 1px solid var(--border-subtle);
   }
   .agents-editor {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
+    flex: none;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-muted);
+    gap: var(--space-2);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-base);
+    color: var(--text-secondary);
   }
   .agents-editor p {
     margin: 0;
   }
   .agents-editor textarea {
     height: 220px;
-    font: 12px var(--font-mono);
-    background: var(--bg-editor);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px;
+    padding: var(--space-2);
+    font: var(--fs-sm) / 1.5 var(--font-mono);
+    font-variant-ligatures: none;
+    tab-size: 2;
     resize: vertical;
   }
   .row {
     display: flex;
-    gap: 6px;
+    gap: var(--space-1);
     flex-wrap: wrap;
     align-items: center;
   }
   .err {
     color: var(--danger);
   }
+
+  /* ── Historial ──────────────────────────────────────────────── */
+
   .messages {
     flex: 1;
     overflow: auto;
-    padding: 12px;
+    padding: var(--space-3);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
   .empty {
     margin: auto 0;
-    text-align: center;
-    color: var(--text-muted);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-3);
+    text-align: center;
+    line-height: var(--lh-base);
+    color: var(--text-secondary);
   }
   .empty p {
     margin: 0;
   }
+  .empty .label {
+    align-self: stretch;
+    text-align: left;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: calc(-1 * var(--space-2));
+  }
+  .connecting {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
   .small {
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  .suggestions {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    overflow: hidden;
   }
   .suggestion {
-    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 28px;
+    padding: var(--space-1) var(--space-2);
+    border: none;
+    border-radius: 0;
+    background: none;
     text-align: left;
-    font-size: 12.5px;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
   }
+  .suggestion + .suggestion {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .suggestion:hover {
+    color: var(--text-primary);
+  }
+  .suggestion :global(svg) {
+    color: var(--text-muted);
+  }
+
+  /* Prompt del usuario: bloque con borde y fondo apenas elevado; nada de burbujas. */
   .user {
-    align-self: flex-end;
-    max-width: 90%;
-    padding: 8px 12px;
-    border-radius: 12px 12px 4px 12px;
-    background: var(--accent);
-    color: var(--accent-text);
-    white-space: pre-wrap;
-    word-break: break-word;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--bg-hover);
+    padding: var(--space-2) var(--space-3);
   }
-  .chips {
+  .who {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 4px;
+    align-items: center;
+    gap: var(--space-1);
+    margin-bottom: var(--space-1);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    color: var(--text-muted);
   }
   .chip {
-    font-size: 10.5px;
-    padding: 1px 6px;
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--accent-text) 20%, transparent);
+    padding: 0 var(--space-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font: var(--fw-regular) var(--fs-xs) / 16px var(--font-mono);
+    color: var(--text-secondary);
   }
+  .user-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: var(--lh-base);
+    color: var(--text-primary);
+  }
+  /* Respuesta: texto corrido alineado con el del prompt. */
   .agent {
+    padding: 0 calc(var(--space-3) + 1px);
     line-height: 1.55;
     word-break: break-word;
+    color: var(--text-primary);
   }
+
+  /* Markdown de las respuestas. */
   .md :global(p) {
     margin: 0 0 0.6em;
   }
   .md :global(p:last-child) {
     margin-bottom: 0;
   }
-  .md :global(pre) {
-    background: var(--bg-editor);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px;
-    overflow-x: auto;
-    font-size: 12px;
-  }
-  .md :global(code) {
-    font-family: var(--font-mono);
-    font-size: 0.92em;
-    background: var(--bg-hover);
-    padding: 0 3px;
-    border-radius: 3px;
-  }
-  .md :global(pre code) {
-    background: none;
-    padding: 0;
+  .md :global(h1),
+  .md :global(h2),
+  .md :global(h3) {
+    margin: 0.8em 0 0.4em;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
   }
   .md :global(ul),
   .md :global(ol) {
-    margin: 0.3em 0;
+    margin: 0.3em 0 0.6em;
     padding-left: 1.4em;
   }
   .md :global(a) {
     color: var(--accent);
+    text-underline-offset: 2px;
+  }
+  .md :global(pre),
+  .tool-out pre,
+  .log pre {
+    margin: var(--space-2) 0;
+    padding: var(--space-2) var(--space-3);
+    overflow-x: auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--bg-inset);
+    color: var(--text-primary);
+    font: var(--fs-sm) / 1.5 var(--font-mono);
+    font-variant-ligatures: none;
+    tab-size: 2;
+    white-space: pre;
+  }
+  .md :global(code) {
+    padding: 0 3px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-active);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    font-variant-ligatures: none;
+  }
+  .md :global(pre code) {
+    padding: 0;
+    background: none;
+    font-size: inherit;
   }
   .md :global(table) {
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
   .md :global(th),
   .md :global(td) {
-    border: 1px solid var(--border);
-    padding: 2px 6px;
+    border: 1px solid var(--border-subtle);
+    padding: 2px var(--space-2);
+    text-align: left;
   }
-  .thought {
-    font-size: 12px;
+  .md :global(th) {
+    background: var(--bg-hover);
+    font-weight: var(--fw-semibold);
+  }
+
+  /* Plegables (razonamiento, resultado de herramienta, registro). */
+  .fold summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    list-style: none;
+    cursor: pointer;
+    font-size: var(--fs-sm);
     color: var(--text-muted);
   }
-  .thought summary {
-    cursor: pointer;
-    color: var(--text-faint);
+  .fold summary::-webkit-details-marker {
+    display: none;
   }
+  .fold summary:hover {
+    color: var(--text-secondary);
+  }
+  .fold summary :global(svg) {
+    transition: transform var(--duration-fast) var(--ease);
+  }
+  .fold[open] > summary :global(svg) {
+    transform: rotate(90deg);
+  }
+  .thought {
+    padding: 0 calc(var(--space-3) + 1px);
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+  }
+  .thought .md {
+    margin-top: var(--space-1);
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--border-subtle);
+    line-height: var(--lh-base);
+  }
+
+  /* Llamadas a herramientas: fila técnica con borde, estado a la derecha. */
   .tool {
-    border-left: 2px solid var(--border-strong);
-    padding: 2px 0 2px 10px;
-    font-size: 12.5px;
-  }
-  .tool.completed {
-    border-left-color: var(--ok);
-  }
-  .tool.failed {
-    border-left-color: var(--danger);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    font-size: var(--fs-sm);
   }
   .tool-head {
     display: flex;
-    gap: 6px;
-    align-items: baseline;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--h-row);
+    padding: var(--space-1) var(--space-2);
+    color: var(--text-secondary);
+  }
+  .ic {
+    flex: none;
+    display: flex;
     color: var(--text-muted);
   }
   .tool-title {
     flex: 1;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    word-break: break-all;
+    min-width: 0;
+    font: var(--fs-sm) / 1.35 var(--font-mono);
+    font-variant-ligatures: none;
+    overflow-wrap: anywhere;
   }
   .tool-status {
-    color: var(--text-faint);
+    flex: none;
+    display: flex;
+    color: var(--text-muted);
+  }
+  .tool.completed .tool-status {
+    color: var(--ok);
+  }
+  .tool.failed {
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  }
+  .tool.failed .tool-status {
+    color: var(--danger);
   }
   .loc {
+    display: block;
+    min-height: 0;
+    padding: 0 var(--space-2) var(--space-1) calc(var(--space-2) + 13px + var(--space-2));
     border: none;
     background: none;
-    padding: 0;
-    font: 11.5px var(--font-mono);
-    color: var(--accent);
-    display: block;
+    font: var(--fs-xs) var(--font-mono);
+    color: var(--text-secondary);
+    text-align: left;
   }
-  .tool-out summary {
-    cursor: pointer;
-    color: var(--text-faint);
-    font-size: 11.5px;
+  .loc:hover {
+    color: var(--accent);
+    background: none;
+  }
+  .tool-body {
+    padding: 0 var(--space-2) var(--space-2);
+  }
+  .tool-out {
+    padding: 0 var(--space-2) var(--space-1);
   }
   .tool-out pre {
     max-height: 200px;
     overflow: auto;
-    font-size: 11.5px;
-    background: var(--bg-editor);
-    padding: 6px;
-    border-radius: 6px;
     white-space: pre-wrap;
+    font-size: var(--fs-xs);
   }
-  .plan {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 12.5px;
+
+  /* Bloques con cabecera (plan, permisos, archivos modificados). */
+  .plan,
+  .action,
+  .edited {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    font-size: var(--fs-sm);
   }
-  .plan-title {
-    font-weight: 600;
-    margin-bottom: 4px;
+  .block-head {
+    display: flex;
+    align-items: center;
+    height: var(--h-row);
+    padding: 0 var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
   }
   .plan-entry {
     display: flex;
-    gap: 6px;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    line-height: 1.35;
+  }
+  .plan-entry :global(svg) {
+    margin-top: 1px;
+    color: var(--text-muted);
+  }
+  .plan-entry.in_progress :global(svg) {
+    color: var(--accent);
   }
   .plan-entry.completed {
-    color: var(--text-faint);
+    color: var(--text-muted);
     text-decoration: line-through;
   }
-  .notice {
-    font-size: 12px;
+  /* Requiere una respuesta: el único bloque que lleva el acento. */
+  .action {
+    border-color: var(--border-strong);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .action-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+  .action-body p {
+    margin: 0;
+    line-height: var(--lh-base);
+  }
+  .action .danger {
+    color: var(--danger);
+  }
+  .action .danger:hover {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+  }
+  .edited .file {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: var(--h-row);
+    padding: 0 var(--space-2);
+    border: none;
+    border-radius: 0;
+    background: none;
+    font: var(--fs-sm) var(--font-mono);
+    color: var(--text-primary);
+    text-align: left;
+  }
+  .edited .file:hover {
+    background: var(--bg-hover);
+  }
+  .edited .file :global(svg) {
     color: var(--text-muted);
-    text-align: center;
+  }
+  .hint {
+    margin: 0;
+    padding: var(--space-1) var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+
+  .notice {
+    padding: 0 calc(var(--space-3) + 1px);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
   }
   .notice.error {
     color: var(--danger);
     white-space: pre-wrap;
-    text-align: left;
   }
   .working {
-    color: var(--text-muted);
-    font-size: 12.5px;
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-  .permission,
-  .auth {
-    border: 1px solid var(--accent);
-    border-radius: 10px;
-    padding: 10px;
-    background: var(--bg-editor);
-  }
-  .auth p {
-    margin: 0 0 8px;
-  }
-  .perm-title {
-    margin-bottom: 6px;
-  }
-  .perm-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .perm-options button {
-    font-size: 12.5px;
-  }
-  .perm-options .danger:hover {
-    background: var(--danger);
-    color: white;
-  }
-  .edited {
-    font-size: 12px;
-    color: var(--text-muted);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: baseline;
-  }
-  .edited .link {
-    color: var(--accent);
-    font: 12px var(--font-mono);
-  }
-  .hint {
-    color: var(--text-faint);
-  }
-  .log summary {
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--text-faint);
+    gap: var(--space-2);
+    padding: 0 calc(var(--space-3) + 1px);
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
   }
   .log pre {
-    font-size: 11px;
     max-height: 180px;
     overflow: auto;
     white-space: pre-wrap;
-    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
   }
+
+  /* ── Entrada ────────────────────────────────────────────────── */
+
   .composer {
-    border-top: 1px solid var(--border);
-    padding: 8px;
     flex: none;
+    padding: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
   }
   .attachments {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin-bottom: 6px;
     max-height: 120px;
     overflow: auto;
+    margin-bottom: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
   }
   .att {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 11.5px;
-    padding: 3px 4px 3px 8px;
-    border-radius: 6px;
-    background: var(--error-line);
-    white-space: nowrap;
+    gap: var(--space-2);
+    min-height: var(--h-row);
+    padding: 0 2px 0 var(--space-2);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+  }
+  .att + .att {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .sev {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning);
+  }
+  .att.error .sev {
+    background: var(--danger);
+  }
+  .att-loc {
+    flex: none;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+  .att-msg {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .att.warning {
-    background: var(--warning-line);
+  .att button.icon {
+    width: 20px;
+    height: 20px;
   }
-  .att.error {
-    color: var(--text);
-  }
-  .att button {
-    margin-left: auto;
-    border: none;
-    background: none;
-    padding: 0 4px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .ctx {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    font-size: 11.5px;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-  .ctx label {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-  }
-  .ctx label.off {
-    opacity: 0.45;
-  }
+
+  /* Caja de entrada: borde neutro; el acento solo con foco de teclado/escritura. */
   .input {
-    position: relative;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--bg-inset);
+    transition: border-color var(--duration-fast) var(--ease);
+  }
+  .input:has(textarea:focus-visible) {
+    border-color: var(--focus-ring);
   }
   .input textarea {
+    display: block;
     width: 100%;
+    min-height: 44px;
+    max-height: 200px;
+    field-sizing: content;
+    padding: var(--space-2) var(--space-2) var(--space-1);
+    border: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: none;
     resize: none;
-    font: inherit;
-    font-size: 13px;
-    padding: 8px 44px 8px 10px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--bg-editor);
-    color: var(--text);
+    font-size: var(--fs-base);
+    line-height: var(--lh-base);
   }
   .input textarea:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: -1px;
+    border: none;
+    box-shadow: none;
   }
-  .send,
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 28px;
+    padding: 0 2px 0 var(--space-1);
+  }
+  .toggle {
+    min-height: 0;
+    height: 20px;
+    padding: 0 var(--space-2);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: none;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+  .toggle:hover:not(:disabled) {
+    color: var(--text-primary);
+  }
+  .toggle.on {
+    border-color: var(--border-strong);
+    background: var(--bg-active);
+    color: var(--text-primary);
+  }
+  .toggle:disabled {
+    opacity: 0.4;
+  }
+  .keys {
+    margin-right: var(--space-1);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .keys kbd {
+    font-family: var(--font-mono);
+    margin-left: var(--space-1);
+  }
+  .toolbar button.icon {
+    width: 24px;
+    height: 24px;
+  }
+  .send:not(:disabled) {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .send:not(:disabled):hover {
+    background: var(--accent-hover);
+    color: var(--accent-text);
+  }
   .stop {
-    position: absolute;
-    right: 8px;
-    bottom: 10px;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border-radius: 8px;
+    color: var(--danger);
   }
-  .stop {
-    background: var(--danger);
-    border-color: var(--danger);
-    color: white;
+  .stop:hover {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    color: var(--danger);
   }
+  /* Con el panel estrecho sobran las pistas de teclado. */
+  @container (max-width: 360px) {
+    .keys {
+      display: none;
+    }
+  }
+  .composer {
+    container-type: inline-size;
+  }
+
   .spin {
     display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--border-strong);
+    flex: none;
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--border-strong);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;

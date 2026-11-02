@@ -29,8 +29,9 @@ class Theme {
     return { system: "Tema: sistema", light: "Tema: claro", dark: "Tema: oscuro" }[this.pref];
   }
 
+  /** Nombre del icono de `Icon.svelte`. */
   get icon() {
-    return { system: "◑", light: "☀", dark: "☾" }[this.pref];
+    return ({ system: "monitor", light: "sun", dark: "moon" } as const)[this.pref];
   }
 }
 

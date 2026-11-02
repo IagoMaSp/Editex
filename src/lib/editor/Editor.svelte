@@ -91,7 +91,7 @@
     display: flex;
     align-items: center;
     border-right: 1px solid var(--border);
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 13px;
   }
   .tab.active {
@@ -146,7 +146,7 @@
     flex: 1;
     display: grid;
     place-items: center;
-    color: var(--text-faint);
+    color: var(--text-muted);
   }
   .menu {
     position: fixed;
@@ -174,7 +174,7 @@
   }
   .menu .muted {
     padding: 5px 10px;
-    color: var(--text-faint);
+    color: var(--text-muted);
   }
   hr {
     border: none;

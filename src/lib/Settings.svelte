@@ -78,14 +78,14 @@
 <style>
   .pop {
     position: absolute;
-    top: 46px;
-    right: 10px;
+    top: calc(var(--h-header) + var(--space-1));
+    right: var(--space-2);
     z-index: 40;
     width: 340px;
     padding: 14px 16px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
@@ -100,14 +100,14 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
   label {
     display: flex;
     flex-direction: column;
     gap: 4px;
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
   label.check {
     flex-direction: row;
@@ -121,7 +121,7 @@
   }
   small {
     display: block;
-    color: var(--text-faint);
+    color: var(--text-muted);
     font-size: 11.5px;
     margin-top: 1px;
   }
