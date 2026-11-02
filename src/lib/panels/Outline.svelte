@@ -46,7 +46,7 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
   .list {
     overflow: auto;
@@ -77,11 +77,11 @@
   }
   .level-4,
   .level-5 {
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
   .empty {
     padding: 4px 12px;
-    color: var(--text-faint);
+    color: var(--text-muted);
     font-size: 13px;
   }
 </style>

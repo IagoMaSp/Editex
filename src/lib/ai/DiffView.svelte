@@ -51,34 +51,46 @@
   </div>
   <div class="body">
     {#each rows as r, i (i)}
-      <div class="row {r.type}"><span class="sign">{r.type === "add" ? "+" : r.type === "del" ? "−" : ""}</span>{r.text || " "}</div>
+      <div class="row {r.type}"><span class="sign">{r.type === "add" ? "+" : r.type === "del" ? "−" : ""}</span><span class="text">{r.text || " "}</span></div>
     {/each}
   </div>
 </div>
 
 <style>
   .diff {
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    margin: var(--space-1) 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
     overflow: hidden;
-    margin: 6px 0;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
   .head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 8px;
+    gap: var(--space-2);
+    height: var(--h-row);
+    padding: 0 var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
     background: var(--bg-hover);
     font-family: var(--font-mono);
+    font-size: var(--fs-xs);
   }
   .head .link {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: inherit;
+    color: var(--text-primary);
+  }
+  .head .link:hover {
     color: var(--accent);
-    font-size: 12px;
-    font-family: var(--font-mono);
   }
   .stats {
     margin-left: auto;
+    display: flex;
+    gap: var(--space-2);
+    font-variant-numeric: tabular-nums;
   }
   .a {
     color: var(--ok);
@@ -87,41 +99,53 @@
     color: var(--danger);
   }
   .new {
-    font-size: 10.5px;
-    padding: 0 5px;
-    border-radius: 6px;
-    background: var(--accent-soft);
-    color: var(--accent);
+    padding: 0 var(--space-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-ui);
+    color: var(--text-secondary);
   }
+  /* Rejilla monoespaciada estricta: misma altura de línea, sin ligaduras, tabulador de 2. */
   .body {
     max-height: 320px;
     overflow: auto;
-    font-family: var(--font-mono);
-    background: var(--bg-editor);
+    background: var(--bg-inset);
+    font: var(--fs-sm) / 18px var(--font-mono);
+    font-variant-ligatures: none;
+    tab-size: 2;
   }
   .row {
+    display: flex;
+    min-height: 18px;
+    padding-right: var(--space-2);
+  }
+  .text {
+    flex: 1;
+    min-width: 0;
     white-space: pre-wrap;
-    word-break: break-word;
-    padding: 0 8px 0 0;
-    line-height: 1.5;
+    overflow-wrap: anywhere;
   }
   .sign {
-    display: inline-block;
-    width: 18px;
+    flex: none;
+    width: 2ch;
     text-align: center;
-    color: var(--text-faint);
+    color: var(--text-muted);
     user-select: none;
   }
   .add {
-    background: color-mix(in srgb, var(--ok) 14%, transparent);
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+  }
+  .add .sign {
+    color: var(--ok);
   }
   .del {
-    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+  }
+  .del .sign {
+    color: var(--danger);
   }
   .gap {
-    color: var(--text-faint);
-    font-style: italic;
-    padding-left: 18px;
-    background: var(--bg-panel);
+    color: var(--text-muted);
+    background: var(--bg-hover);
   }
 </style>

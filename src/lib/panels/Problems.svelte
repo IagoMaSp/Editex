@@ -127,7 +127,7 @@
     border: none;
     background: none;
     padding: 6px 10px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     border-radius: 6px;
   }
   .tabs > button.sel {
@@ -138,14 +138,14 @@
     flex: 1;
   }
   .hint {
-    color: var(--text-faint);
+    color: var(--text-muted);
     margin-right: 12px;
   }
   label {
     display: flex;
     gap: 4px;
     align-items: center;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin-right: 8px;
   }
   .badge {
@@ -215,7 +215,7 @@
     color: var(--warning);
   }
   .info .sev {
-    color: var(--text-faint);
+    color: var(--text-muted);
   }
   .msg {
     flex: 1;
@@ -224,7 +224,7 @@
   .why {
     display: block;
     margin-top: 2px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 12px;
   }
   .to-ai {
@@ -244,7 +244,7 @@
   }
   .loc {
     flex: none;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: 12px;
   }
@@ -254,11 +254,11 @@
     font-size: 12px;
     font-family: var(--font-mono);
     white-space: pre-wrap;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
   .empty {
     padding: 10px 12px;
-    color: var(--text-faint);
+    color: var(--text-muted);
     font-size: 13px;
   }
 </style>

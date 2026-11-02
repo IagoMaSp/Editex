@@ -3,6 +3,7 @@
   import type { FileNode } from "../api";
   import { api } from "../api";
   import { app } from "../store.svelte";
+  import Icon, { type IconName } from "../Icon.svelte";
 
   // Archivos que genera LaTeX al compilar (de Editex van a .editex/, pero pueden venir de otros editores).
   const GENERATED =
@@ -164,13 +165,13 @@
     else if (e.key === "Delete") void remove(node);
   }
 
-  function icon(node: FileNode) {
-    if (node.is_dir) return expanded[node.path] ? "▾" : "▸";
-    if (node.path === app.settings.main) return "★";
-    if (/\.tex$/.test(node.name)) return "T";
-    if (/\.bib$/.test(node.name)) return "B";
-    if (/\.(png|jpe?g|pdf|svg|eps)$/i.test(node.name)) return "◫";
-    return "·";
+  function icon(node: FileNode): IconName {
+    if (node.is_dir) return "folder";
+    if (node.path === app.settings.main) return "star";
+    if (/\.(tex|sty|cls)$/.test(node.name)) return "fileText";
+    if (/\.bib$/.test(node.name)) return "book";
+    if (/\.(png|jpe?g|pdf|svg|eps)$/i.test(node.name)) return "image";
+    return "file";
   }
 </script>
 
@@ -178,14 +179,18 @@
 
 <div class="tree">
   <div class="head">
-    <span>Archivos</span>
-    <button class="icon" title="Nuevo archivo" onclick={() => startCreate("file")}>＋</button>
-    <button class="icon" title="Nueva carpeta" onclick={() => startCreate("folder")}>⊞</button>
+    <span>Proyecto</span>
+    <button class="icon" title="Nuevo archivo" aria-label="Nuevo archivo" onclick={() => startCreate("file")}><Icon name="plus" size={14} /></button>
+    <button class="icon" title="Nueva carpeta" aria-label="Nueva carpeta" onclick={() => startCreate("folder")}>
+      <Icon name="folderPlus" size={14} />
+    </button>
     <button
       class="icon"
       class:on={showGenerated}
       title={showGenerated ? "Ocultar archivos generados (.aux, .log…)" : "Mostrar archivos generados (.aux, .log…)"}
-      onclick={toggleGenerated}>◌</button
+      aria-label="Archivos generados"
+      aria-pressed={showGenerated}
+      onclick={toggleGenerated}><Icon name={showGenerated ? "eye" : "eyeOff"} size={14} /></button
     >
   </div>
 
@@ -193,7 +198,7 @@
     <!-- svelte-ignore a11y_autofocus -->
     <input
       class="new"
-      style="margin-left:{10 + depth * 14}px"
+      style:--depth={depth}
       autofocus
       placeholder={creating?.kind === "file" ? "nombre.tex" : "carpeta"}
       bind:value={newName}
@@ -220,7 +225,7 @@
           <!-- svelte-ignore a11y_autofocus -->
           <input
             class="new"
-            style="margin-left:{10 + depth * 14}px"
+            style:--depth={depth}
             autofocus
             bind:value={renameValue}
             onfocus={(e) => {
@@ -241,8 +246,9 @@
             class:main={node.path === app.settings.main}
             class:drop={drag?.target === node.path}
             class:dragged={drag?.node.path === node.path}
-            style="padding-left:{10 + depth * 14}px"
+            style:--depth={depth}
             title={node.path}
+            aria-expanded={node.is_dir ? !!expanded[node.path] : undefined}
             data-drop={node.path}
             data-dir={node.is_dir ? "1" : "0"}
             onclick={() => onRowClick(node)}
@@ -250,7 +256,8 @@
             oncontextmenu={(e) => openMenu(e, node)}
             onkeydown={(e) => onRowKey(e, node)}
           >
-            <span class="ic" class:dir={node.is_dir}>{icon(node)}</span>
+            <span class="chev" class:open={expanded[node.path]}>{#if node.is_dir}<Icon name="chevron" size={12} />{/if}</span>
+            <span class="ic {icon(node)}"><Icon name={icon(node)} size={14} /></span>
             <span class="name" class:has-error={problems[node.path]?.error} class:has-warning={!problems[node.path]?.error && problems[node.path]?.warning}>{node.name}</span>
             {#if problems[node.path]?.error}
               <span class="badge err" title="{problems[node.path].error} errores">{problems[node.path].error}</span>
@@ -271,7 +278,7 @@
 </div>
 
 {#if drag}
-  <div class="ghost" style="left:{drag.x + 12}px;top:{drag.y + 8}px">
+  <div class="ghost" style:left="{drag.x + 12}px" style:top="{drag.y + 8}px">
     {drag.node.name}{drag.target !== null ? ` → ${drag.target || "raíz"}` : ""}
   </div>
 {/if}
@@ -279,7 +286,7 @@
 {#if menu}
   {@const node = menu.node}
   {@const dir = node ? (node.is_dir ? node.path : parentOf(node.path)) : ""}
-  <div class="menu" style="left:{menu.x}px;top:{menu.y}px" role="menu">
+  <div class="menu" style:left="{menu.x}px" style:top="{menu.y}px" role="menu">
     {#if node && !node.is_dir}
       <button onclick={() => ((menu = null), app.openFile(node.path))}>Abrir</button>
     {/if}
@@ -299,18 +306,28 @@
 
 <style>
   .tree {
+    /* Geometría de las filas: la sangría y las líneas guía salen de aquí. */
+    --indent: 12px;
+    --row-pad: var(--space-2);
+    --chev: 16px;
+    --guide: var(--border-subtle);
     display: flex;
     flex-direction: column;
     min-height: 0;
     flex: 1;
   }
+  .tree:hover {
+    --guide: var(--border-strong);
+  }
   .head {
+    flex: none;
+    height: var(--h-control);
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 8px 8px 6px 12px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 0 var(--space-1) 0 var(--space-3);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -318,41 +335,64 @@
   .head span {
     flex: 1;
   }
-  .new {
-    display: block;
-    width: calc(100% - 24px);
-    margin: 2px 8px 2px 10px;
-    padding: 3px 6px;
+  .head button.icon {
+    width: 22px;
+    height: 22px;
   }
   .list {
     overflow: auto;
     flex: 1;
-    padding-bottom: 8px;
+    padding-bottom: var(--space-2);
   }
   .list.drop-root {
     background: var(--accent-soft);
   }
+
+  /* ── Filas ──────────────────────────────────────────────────── */
+
   .row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-1);
     width: 100%;
+    height: var(--h-row);
+    min-height: 0;
+    padding: 0 var(--row-pad) 0 calc(var(--row-pad) + var(--depth) * var(--indent));
     border: none;
-    background: none;
     border-radius: 0;
-    padding: 4px 10px;
+    background: none;
     text-align: left;
-    color: var(--text);
-    font-size: 13px;
+    color: var(--text-primary);
+    font-size: var(--fs-base);
+    line-height: 1;
     cursor: pointer;
     touch-action: none;
+    /* Solo el color de fondo, y casi inmediato: el árbol debe sentirse instantáneo. */
+    transition: background-color var(--duration-fast) var(--ease);
+  }
+  /* Líneas guía: una por nivel de anidación, alineadas con el centro del chevron del padre. */
+  .row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--row-pad) + var(--chev) / 2 - 0.5px);
+    width: calc(var(--depth) * var(--indent));
+    background: repeating-linear-gradient(to right, var(--guide) 0 1px, transparent 1px var(--indent));
+    pointer-events: none;
   }
   .row:hover {
     background: var(--bg-hover);
   }
+  .row:focus-visible {
+    outline: 1px solid var(--focus-ring);
+    outline-offset: -1px;
+  }
   .row.active {
-    background: var(--bg-selected);
+    background: var(--bg-active);
     color: var(--text-strong);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .row.drop {
     background: var(--accent-soft);
@@ -361,25 +401,36 @@
   .row.dragged {
     opacity: 0.5;
   }
-  .ic {
-    width: 14px;
+
+  .chev {
     flex: none;
-    text-align: center;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-faint);
+    width: var(--chev);
+    display: flex;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: transform var(--duration-fast) var(--ease);
   }
-  .ic.dir {
-    font-size: 11px;
+  .chev.open {
+    transform: rotate(90deg);
   }
-  .main .ic {
+  .ic {
+    flex: none;
+    display: flex;
+    color: var(--text-muted);
+  }
+  .ic.folder {
+    color: var(--text-secondary);
+  }
+  .ic.star {
     color: var(--accent);
   }
   .name {
+    flex: 1;
+    min-width: 0;
+    margin-left: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
   }
   .has-error {
     color: var(--danger);
@@ -390,74 +441,98 @@
   .badge {
     flex: none;
     min-width: 16px;
-    padding: 0 4px;
-    border-radius: 8px;
-    font-size: 10.5px;
-    font-weight: 700;
+    height: 16px;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
     text-align: center;
-    color: white;
   }
   .badge.err {
-    background: var(--danger);
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
   }
   .badge.warn {
-    background: var(--warning);
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 16%, transparent);
   }
+  /* Cambios sin guardar. */
   .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
     flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
   }
+
+  /* Campo de nombre (crear/renombrar), alineado con el icono de la fila. */
+  .new {
+    display: block;
+    height: 22px;
+    margin: 1px var(--row-pad) 1px calc(var(--row-pad) + var(--depth) * var(--indent) + var(--chev) + var(--space-1));
+    width: calc(100% - 2 * var(--row-pad) - var(--depth) * var(--indent) - var(--chev) - var(--space-1));
+    padding: 0 var(--space-1);
+  }
+
+  /* ── Arrastre y menú contextual ─────────────────────────────── */
+
   .ghost {
     position: fixed;
     z-index: 60;
     pointer-events: none;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: var(--accent);
-    color: var(--accent-text);
-    font-size: 12px;
-    box-shadow: var(--shadow);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius);
+    border: 1px solid var(--accent);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
+    box-shadow: var(--shadow-popover);
   }
   .menu {
     position: fixed;
     z-index: 50;
     min-width: 210px;
-    padding: 4px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    font-size: 13px;
+    padding: var(--space-1);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-popover);
+    font-size: var(--fs-base);
   }
   .menu button {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: var(--space-3);
     width: 100%;
+    height: var(--h-row);
+    min-height: 0;
+    padding: 0 var(--space-2);
     text-align: left;
     border: none;
+    border-radius: var(--radius);
     background: none;
-    padding: 5px 10px;
-    border-radius: 5px;
   }
   .menu button:hover {
-    background: var(--accent);
-    color: var(--accent-text);
+    background: var(--bg-hover);
+  }
+  .menu button.danger {
+    color: var(--danger);
   }
   .menu button.danger:hover {
-    background: var(--danger);
-    color: white;
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
   }
-  kbd {
-    font: 11px var(--font-mono);
-    opacity: 0.6;
+  .menu kbd {
+    border: none;
+    padding: 0;
+    color: var(--text-muted);
   }
   hr {
     border: none;
-    border-top: 1px solid var(--border);
-    margin: 4px 0;
+    border-top: 1px solid var(--border-subtle);
+    margin: var(--space-1) 0;
   }
   :global(body.dragging-file) {
     cursor: grabbing;

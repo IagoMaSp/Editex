@@ -1,7 +1,7 @@
 <script lang="ts">
   import { basename, kbd } from "./lib/platform";
   import { open, save } from "@tauri-apps/plugin-dialog";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { api } from "./lib/api";
   import { app } from "./lib/store.svelte";
   import Editor from "./lib/editor/Editor.svelte";
@@ -17,6 +17,7 @@
   import SearchPanel from "./lib/panels/SearchPanel.svelte";
   import CommandPalette, { type PaletteItem } from "./lib/CommandPalette.svelte";
   import { theme } from "./lib/theme.svelte";
+  import Icon from "./lib/Icon.svelte";
   import { isTextFile } from "./lib/store.svelte";
   import { FIGURES_DIR, IMAGE_EXT, insertFigure } from "./lib/editor/images";
   import { recheckSpelling } from "./lib/editor/spell";
@@ -96,9 +97,13 @@
     return nodes.flatMap((n) => (n.is_dir ? allFiles(n.children) : [n.path]));
   }
 
-  function openSearch() {
+  async function openSearch() {
     ui.sidebar = true;
-    ui.sideTab = "search";
+    if (!ui.search) ui.search = true; // Al montarse, el panel enfoca su campo.
+    else {
+      await tick();
+      document.querySelector<HTMLInputElement>(".search-section input")?.select();
+    }
   }
 
   async function setSetting<K extends keyof typeof app.settings>(key: K, value: (typeof app.settings)[K]) {
@@ -108,7 +113,7 @@
   }
 
   const commands = $derived.by((): PaletteItem[] => {
-    const c = (label: string, run: () => unknown, detail?: string): PaletteItem => ({ label, detail, kind: "›", run: () => void run() });
+    const c = (label: string, run: () => unknown, shortcut?: string, detail?: string): PaletteItem => ({ label, shortcut, detail, run: () => void run() });
     const engines: [Engine, string][] = [["pdflatex", "pdfLaTeX"], ["xelatex", "XeLaTeX"], ["lualatex", "LuaLaTeX"]];
     const langs: [SpellLang, string][] = [["es+en", "español + inglés"], ["es", "español"], ["en", "inglés"], ["off", "desactivada"]];
     const autos: [AutoCompile, string][] = [["off", "nunca"], ["save", "al guardar"], ["idle", "al dejar de escribir"]];
@@ -130,10 +135,10 @@
       c("Mostrar esquema", () => ((ui.sidebar = true), (ui.sideTab = "outline"))),
       c(`Cambiar tema (ahora: ${theme.label.replace("Tema: ", "")})`, () => theme.cycle()),
       c(`${app.settings.fastMode ? "Desactivar" : "Activar"} modo rápido`, () => setSetting("fastMode", !app.settings.fastMode)),
-      ...engines.map(([e, name]) => c(`Motor: ${name}`, () => setSetting("engine", e), app.settings.engine === e ? "actual" : undefined)),
-      ...langs.map(([l, name]) => c(`Ortografía: ${name}`, () => setSetting("spellLang", l), app.settings.spellLang === l ? "actual" : undefined)),
-      ...autos.map(([a, name]) => c(`Compilar automáticamente: ${name}`, () => setSetting("autoCompile", a), app.settings.autoCompile === a ? "actual" : undefined)),
-      c("Insertar snippet…", () => (ui.palette = "snippets"), "o escribe el prefijo + Tab"),
+      ...engines.map(([e, name]) => c(`Motor: ${name}`, () => setSetting("engine", e), undefined, app.settings.engine === e ? "actual" : undefined)),
+      ...langs.map(([l, name]) => c(`Ortografía: ${name}`, () => setSetting("spellLang", l), undefined, app.settings.spellLang === l ? "actual" : undefined)),
+      ...autos.map(([a, name]) => c(`Compilar automáticamente: ${name}`, () => setSetting("autoCompile", a), undefined, app.settings.autoCompile === a ? "actual" : undefined)),
+      c("Insertar snippet…", () => (ui.palette = "snippets"), undefined, "o escribe el prefijo + Tab"),
       c("Editar mis snippets del proyecto", () => app.editUserSnippets()),
       c(`${app.settings.mathPreview ? "Desactivar" : "Activar"} vista previa de fórmulas`, () => setSetting("mathPreview", !app.settings.mathPreview)),
       c("Ir al siguiente error", () => app.nextProblem(1), "F8"),
@@ -152,11 +157,11 @@
   const fileItems = $derived.by((): PaletteItem[] => {
     const files: PaletteItem[] = allFiles(app.files)
       .filter(isTextFile)
-      .map((f) => ({ label: f.split("/").pop()!, detail: f, kind: "T", run: () => app.openFile(f) }));
+      .map((f) => ({ label: f.split("/").pop()!, detail: f, icon: "fileText", run: () => app.openFile(f) }));
     const sections: PaletteItem[] = app.outline.map((o) => ({
       label: o.title || "(sin título)",
       detail: `${o.file}:${o.line}`,
-      kind: "§",
+      icon: "hash",
       run: () => app.openFile(o.file, o.line),
     }));
     return [...files, ...sections];
@@ -168,7 +173,7 @@
       ? app.snippets.map((s) => ({
           label: s.prefix,
           detail: s.description,
-          kind: "✎",
+          icon: "code",
           run: () => {
             const view = app.editor.view;
             if (!view || !app.active) return;
@@ -249,7 +254,7 @@
     }
     if (key === "f" && e.shiftKey) {
       e.preventDefault();
-      openSearch();
+      void openSearch();
       return;
     }
     // Dentro del editor el resto de atajos los gestiona CodeMirror.
@@ -271,7 +276,7 @@
 
 {#if !app.root}
   <div class="welcome">
-    <button class="icon theme" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
+    <button class="icon theme" title={theme.label} aria-label={theme.label} onclick={() => theme.cycle()}><Icon name={theme.icon} /></button>
     <div class="card">
       <div class="logo">E<span>χ</span></div>
       <h1>Editex</h1>
@@ -292,52 +297,87 @@
     </div>
   </div>
 {:else}
+  <!-- Tres columnas: lateral (archivos/esquema/búsqueda) · edición (editor + problemas) · derecha (PDF, IA). -->
   <div class="app">
-    <header>
-      <button class="icon" title="Panel lateral" onclick={() => (ui.sidebar = !ui.sidebar)}>☰</button>
-      <span class="brand">Editex</span>
-      <span class="project" title={app.root}>{projectName}</span>
-      <div class="menu">
-        <button onclick={openFolder}>Abrir</button>
-        <button onclick={importZip}>Importar ZIP</button>
-        <button onclick={exportZip}>Exportar ZIP</button>
-      </div>
-      <div class="spacer"></div>
-      <div class="compile">
-        <button class="primary run" disabled={!app.settings.main} title="Compilar ({kbd('Ctrl+Enter')})" onclick={() => app.compile()}>
-          {#if app.compiling}<span class="spin"></span>{:else}▶{/if}
-          Compilar
+    <header class="bar topbar">
+      <div class="group">
+        <button class="icon" class:on={ui.sidebar} title="Panel lateral" aria-label="Panel lateral" onclick={() => (ui.sidebar = !ui.sidebar)}>
+          <Icon name="sidebar" />
         </button>
-        <button class="primary full" title="Compilación completa ({kbd('Ctrl+Shift+Enter')})" onclick={() => app.compile(true)}>⟳</button>
+        <span class="brand">Editex</span>
+        <span class="sep" aria-hidden="true">/</span>
+        <span class="project" title={app.root}>{projectName}</span>
+        <nav class="menu">
+          <button onclick={openFolder}>Abrir</button>
+          <button onclick={importZip}>Importar ZIP</button>
+          <button onclick={exportZip}>Exportar ZIP</button>
+        </nav>
       </div>
-      {#if app.compiling}
-        <button class="ghost" onclick={() => api.cancelCompile()}>Detener</button>
-      {/if}
-      <div class="spacer"></div>
-      <button class="icon" class:on={ui.problems} title="Problemas y salida" onclick={() => (ui.problems = !ui.problems)}>
-        ⚠{#if errors}<span class="count">{errors}</span>{/if}
-      </button>
-      <button class="icon" class:on={ui.pdf} title="Vista previa PDF" onclick={() => (ui.pdf = !ui.pdf)}>▤</button>
-      <button class="ai-btn" class:on={ui.ai} title="Asistente de IA: Claude Code, Codex… ({kbd('Ctrl+Shift+A')})" onclick={() => (ui.ai = !ui.ai)}>✦ IA</button>
-      <button class="icon" title={theme.label} onclick={() => theme.cycle()}>{theme.icon}</button>
-      <button class="icon" class:on={ui.settings} title="Ajustes" onclick={() => (ui.settings = !ui.settings)}>⚙</button>
+
+      <div class="group center-group">
+        <div class="compile">
+          <button class="primary run" disabled={!app.settings.main} title="Compilar ({kbd('Ctrl+Enter')})" onclick={() => app.compile()}>
+            {#if app.compiling}<span class="spin"></span>{:else}<Icon name="play" size={12} />{/if}
+            Compilar
+          </button>
+          <button
+            class="primary full"
+            title="Compilación completa ({kbd('Ctrl+Shift+Enter')})"
+            aria-label="Compilación completa"
+            onclick={() => app.compile(true)}
+          >
+            <Icon name="rebuild" size={13} />
+          </button>
+        </div>
+        {#if app.compiling}
+          <button class="ghost" onclick={() => api.cancelCompile()}>Detener</button>
+        {/if}
+      </div>
+
+      <div class="group end-group">
+        <button class="icon" class:on={ui.problems} title="Problemas y salida" aria-label="Problemas y salida" onclick={() => (ui.problems = !ui.problems)}>
+          <Icon name="alert" />
+          {#if errors}<span class="count">{errors}</span>{/if}
+        </button>
+        <button class="icon" class:on={ui.pdf} title="Vista previa PDF" aria-label="Vista previa PDF" onclick={() => (ui.pdf = !ui.pdf)}>
+          <Icon name="pdf" />
+        </button>
+        <button class="ai-btn" class:on={ui.ai} title="Asistente de IA: Claude Code, Codex… ({kbd('Ctrl+Shift+A')})" onclick={() => (ui.ai = !ui.ai)}>
+          <Icon name="sparkle" size={14} /> IA
+        </button>
+        <span class="divider" aria-hidden="true"></span>
+        <button class="icon" title={theme.label} aria-label={theme.label} onclick={() => theme.cycle()}><Icon name={theme.icon} /></button>
+        <button class="icon" class:on={ui.settings} title="Ajustes" aria-label="Ajustes" onclick={() => (ui.settings = !ui.settings)}>
+          <Icon name="sliders" />
+        </button>
+      </div>
     </header>
 
     {#if ui.settings}<Settings onclose={() => (ui.settings = false)} />{/if}
     {#if texInfo}<TexNotice info={texInfo} />{/if}
 
-    <div class="main" bind:this={main}>
+    <!-- Los anchos arrastrables van como variables CSS: el resto del estilo vive en <style>. -->
+    <div class="workspace" bind:this={main} style:--sidebar-w="{sidebarWidth}px" style:--pdf-w="{pdfWidth}%" style:--ai-w="{aiWidth}px">
       {#if ui.sidebar}
-        <aside style="width:{sidebarWidth}px">
-          <div class="seg">
-            <button class:sel={ui.sideTab === "files"} onclick={() => (ui.sideTab = "files")}>Archivos</button>
-            <button class:sel={ui.sideTab === "outline"} onclick={() => (ui.sideTab = "outline")}>Esquema</button>
-            <button class:sel={ui.sideTab === "search"} title={kbd("Ctrl+Shift+F")} onclick={() => (ui.sideTab = "search")}>Buscar</button>
+        <aside class="sidebar">
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected={ui.sideTab === "files"} class:sel={ui.sideTab === "files"} onclick={() => (ui.sideTab = "files")}>Archivos</button>
+            <button role="tab" aria-selected={ui.sideTab === "outline"} class:sel={ui.sideTab === "outline"} onclick={() => (ui.sideTab = "outline")}>Esquema</button>
           </div>
-          {#if ui.sideTab === "files"}<FileTree />{:else if ui.sideTab === "outline"}<Outline />{:else}<SearchPanel />{/if}
+          <div class="pane">
+            {#if ui.sideTab === "files"}<FileTree />{:else}<Outline />{/if}
+          </div>
+          <section class="search-section" class:open={ui.search}>
+            <button class="section-head" aria-expanded={ui.search} onclick={() => (ui.search = !ui.search)}>
+              <span class="chev"><Icon name="chevron" size={12} /></span>
+              Buscar
+              <kbd>{kbd("Ctrl+Shift+F")}</kbd>
+            </button>
+            {#if ui.search}<SearchPanel />{/if}
+          </section>
         </aside>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="split" onpointerdown={drag("sidebar")}></div>
+        <div class="splitter" onpointerdown={drag("sidebar")}></div>
       {/if}
       <section class="center">
         <div class="editor"><Editor /></div>
@@ -347,29 +387,35 @@
       </section>
       {#if ui.pdf}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="split" onpointerdown={drag("pdf")}></div>
-        <section class="pdf" style="width:{pdfWidth}%"><PdfViewer /></section>
+        <div class="splitter" onpointerdown={drag("pdf")}></div>
+        <section class="pdf"><PdfViewer /></section>
       {/if}
       {#if ui.ai}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="split" onpointerdown={drag("ai")}></div>
-        <section class="aipanel" style="width:{aiWidth}px"><AiPanel onclose={() => (ui.ai = false)} /></section>
+        <div class="splitter" onpointerdown={drag("ai")}></div>
+        <section class="aipanel"><AiPanel onclose={() => (ui.ai = false)} /></section>
       {/if}
     </div>
 
-    <footer>
-      <span class="lsp {app.lspStatus}" title="Autocompletado (texlab)">
-        ● {app.lspStatus === "ready" ? "texlab" : app.lspStatus === "starting" ? "iniciando texlab…" : app.lspStatus === "error" ? "texlab no disponible" : ""}
+    <footer class="bar statusbar">
+      <span class="item lsp {app.lspStatus}" title="Autocompletado (texlab)">
+        <span class="dot"></span>
+        {app.lspStatus === "ready" ? "texlab" : app.lspStatus === "starting" ? "iniciando texlab…" : app.lspStatus === "error" ? "texlab no disponible" : ""}
       </span>
-      <span>{app.settings.engine}</span>
+      <span class="item">{app.settings.engine}</span>
       {#if app.lastResult}
-        <button class="link" onclick={() => (ui.problems = true)}>
-          <span class:bad={errors > 0}>{errors} errores</span> · {warnings} advertencias
+        <button class="item link" onclick={() => (ui.problems = true)}>
+          <span class:bad={errors > 0}>{errors} errores</span><span class="muted">·</span>{warnings} advertencias
         </button>
-        <span>{app.lastResult.mode} · {(app.lastResult.durationMs / 1000).toFixed(2)} s</span>
+        <span class="item">{app.lastResult.mode} · {(app.lastResult.durationMs / 1000).toFixed(2)} s</span>
       {/if}
       <div class="spacer"></div>
-      <span>{kbd("Ctrl+Shift+P")} comandos · {kbd("Ctrl+P")} archivos · {kbd("Ctrl+Clic")} en PDF → código · {kbd("Ctrl+J")} → PDF</span>
+      <span class="item hints">
+        <kbd>{kbd("Ctrl+Shift+P")}</kbd> comandos
+        <kbd>{kbd("Ctrl+P")}</kbd> archivos
+        <kbd>{kbd("Ctrl+Clic")}</kbd> PDF → código
+        <kbd>{kbd("Ctrl+J")}</kbd> → PDF
+      </span>
     </footer>
   </div>
 {/if}
@@ -387,61 +433,68 @@
 {/if}
 
 <style>
+  /* ── Bienvenida ─────────────────────────────────────────────── */
+
   .welcome {
+    width: 100vw;
     height: 100vh;
+    overflow: hidden;
     display: grid;
     place-items: center;
-    background: radial-gradient(circle at 30% 20%, var(--accent-soft), transparent 60%), var(--bg);
+    background: var(--bg-base);
   }
   .theme {
     position: fixed;
-    top: 12px;
-    right: 12px;
+    top: var(--space-2);
+    right: var(--space-2);
   }
   .card {
-    width: min(460px, 90vw);
-    padding: 36px;
-    border-radius: 16px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
+    width: min(440px, 90vw);
+    padding: var(--space-5);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
   }
   .logo {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--accent);
     color: var(--accent-text);
-    font: 700 24px var(--font-serif);
+    font: var(--fw-semibold) 18px var(--font-serif);
     white-space: nowrap;
   }
   .logo span {
     font-style: italic;
   }
   h1 {
-    margin: 16px 0 4px;
-    font-size: 26px;
+    margin: var(--space-4) 0 var(--space-1);
+    font-size: var(--fs-display);
+    font-weight: var(--fw-semibold);
+    color: var(--text-strong);
   }
   .sub {
-    margin: 0 0 22px;
-    color: var(--text-muted);
+    margin: 0 0 var(--space-5);
+    color: var(--text-secondary);
+    line-height: var(--lh-base);
   }
   .welcome-notice {
-    margin: -8px 0 18px;
-    border-radius: 8px;
+    margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+    border-radius: var(--radius);
     overflow: hidden;
   }
   .actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
   }
   h2 {
-    margin: 26px 0 8px;
-    font-size: 11px;
+    margin: var(--space-5) 0 var(--space-2);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -455,77 +508,128 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    gap: 2px;
     width: 100%;
-    padding: 6px 8px;
-    border-radius: 6px;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius);
   }
   li .link:hover {
     background: var(--bg-hover);
   }
   li small {
-    color: var(--text-faint);
-    font-size: 11.5px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
   }
 
+  /* ── Marco: ocupa justo la ventana, sin scroll exterior ─────── */
+
   .app {
+    width: 100vw;
     height: 100vh;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+    background: var(--bg-base);
   }
-  header {
-    height: 46px;
+
+  /* Barras superior e inferior: misma altura y tipografía. */
+  .bar {
     flex: none;
+    height: var(--h-header);
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 10px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-panel);
+    padding: 0 var(--space-2);
+    font-size: var(--fs-sm);
+    line-height: 1;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .bar button {
+    font-size: var(--fs-sm);
+  }
+  .bar button.icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  /* Barra superior: tres grupos; el de compilar queda centrado de verdad. */
+  .topbar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .end-group {
+    justify-content: flex-end;
   }
   .brand {
-    font: 700 15px var(--font-serif);
-    color: var(--accent);
+    margin-left: var(--space-1);
+    font: var(--fw-semibold) var(--fs-md) var(--font-serif);
+    color: var(--text-strong);
+  }
+  .sep {
+    color: var(--text-muted);
   }
   .project {
-    font-weight: 600;
-    color: var(--text-strong);
+    font-weight: var(--fw-medium);
+    color: var(--text-primary);
+    min-width: 0;
     max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .menu {
     display: flex;
     gap: 2px;
-    margin-left: 8px;
+    margin-left: var(--space-2);
   }
   .menu button {
     border: none;
     background: none;
-    color: var(--text-muted);
-    font-size: 13px;
+    min-height: 24px;
+    padding: 0 var(--space-2);
+    color: var(--text-secondary);
   }
   .menu button:hover {
     background: var(--bg-hover);
-    color: var(--text);
+    color: var(--text-primary);
+  }
+  .divider {
+    width: 1px;
+    height: 16px;
+    margin: 0 var(--space-1);
+    background: var(--border-subtle);
   }
   .spacer {
     flex: 1;
   }
+
   .compile {
     display: flex;
   }
-  .compile .run {
-    border-radius: 8px 0 0 8px;
-    min-width: 116px;
-    display: flex;
+  .compile button {
+    min-height: 24px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+  }
+  .compile .run {
+    border-radius: var(--radius) 0 0 var(--radius);
+    min-width: 104px;
+    gap: var(--space-2);
   }
   .compile .full {
-    border-radius: 0 8px 8px 0;
-    border-left: 1px solid color-mix(in srgb, var(--accent-text) 25%, transparent);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 0 var(--space-2);
+    border-left-color: color-mix(in srgb, var(--accent-text) 25%, transparent);
   }
   .spin {
     width: 12px;
@@ -540,58 +644,54 @@
       transform: rotate(360deg);
     }
   }
+
+  button.icon:has(.count) {
+    width: auto;
+    padding: 0 var(--space-1);
+    gap: 2px;
+  }
   .count {
-    font-size: 10px;
-    margin-left: 2px;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    font-variant-numeric: tabular-nums;
     color: var(--danger);
-    font-weight: 700;
+  }
+  .ai-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 24px;
+    padding: 0 var(--space-2);
+    border-color: var(--border-strong);
+    background: none;
+    color: var(--text-secondary);
+    font-weight: var(--fw-medium);
+  }
+  .ai-btn:hover {
+    color: var(--text-primary);
+  }
+  .ai-btn.on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
-  .main {
+  /* ── Columnas ───────────────────────────────────────────────── */
+
+  .workspace {
     flex: 1;
     display: flex;
     min-height: 0;
     overflow: hidden;
   }
-  aside {
+  .sidebar {
     /* En ventanas estrechas los paneles laterales ceden espacio antes que el editor. */
     flex: 0 1 auto;
+    width: var(--sidebar-w);
     min-width: 140px;
     display: flex;
     flex-direction: column;
-    background: var(--bg-sidebar);
-  }
-  .seg {
-    display: flex;
-    margin: 8px;
-    padding: 2px;
-    border-radius: 8px;
-    background: var(--bg-hover);
-  }
-  .seg button {
-    flex: 1;
-    border: none;
-    background: none;
-    padding: 4px;
-    font-size: 12px;
-    color: var(--text-muted);
-    border-radius: 6px;
-  }
-  .seg button.sel {
-    background: var(--bg-panel);
-    color: var(--text-strong);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
-  }
-  .split {
-    width: 5px;
-    margin: 0 -2px;
-    z-index: 5;
-    flex: none;
-    cursor: col-resize;
-    background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
-  }
-  .split:hover {
-    background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
+    background: var(--bg-surface);
   }
   .center {
     flex: 1 0 0;
@@ -599,37 +699,18 @@
     min-width: min(420px, 36vw);
     display: flex;
     flex-direction: column;
+    background: var(--bg-surface);
   }
   .editor {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--bg-editor);
   }
   .problems {
     height: 32%;
     min-height: 120px;
-    border-top: 1px solid var(--border);
-  }
-  .aipanel {
-    flex: 0 1 auto;
-    min-width: 260px;
-  }
-  .ai-btn {
-    border: 1px solid var(--accent);
-    background: none;
-    color: var(--accent);
-    font-weight: 600;
-    font-size: 12.5px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    margin: 0 4px;
-  }
-  .ai-btn:hover,
-  .ai-btn.on {
-    background: var(--accent);
-    color: var(--accent-text);
+    border-top: 1px solid var(--border-subtle);
   }
   .problems.closed {
     display: none;
@@ -637,24 +718,154 @@
   .pdf {
     /* Encoge más deprisa que el resto (flex-shrink alto). */
     flex: 0 4 auto;
+    width: var(--pdf-w);
     min-width: 160px;
+    background: var(--bg-pdf);
+  }
+  .aipanel {
+    flex: 0 1 auto;
+    width: var(--ai-w);
+    min-width: 260px;
+    background: var(--bg-surface);
   }
 
-  footer {
-    height: 24px;
+  .pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Búsqueda al pie del lateral: una cabecera plegable; abierta, ocupa la mitad inferior. */
+  .search-section {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .search-section.open {
+    flex: 0 0 50%;
+  }
+  .section-head {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 0 12px;
-    font-size: 11.5px;
+    gap: var(--space-1);
+    height: var(--h-control);
+    min-height: 0;
+    padding: 0 var(--space-2);
+    border: none;
+    border-radius: 0;
+    background: none;
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: var(--text-muted);
-    background: var(--bg-panel);
-    border-top: 1px solid var(--border);
   }
-  footer .link {
+  .section-head:hover {
+    color: var(--text-primary);
+  }
+  .section-head .chev {
+    display: flex;
+    transition: transform var(--duration-fast) var(--ease);
+  }
+  .search-section.open .chev {
+    transform: rotate(90deg);
+  }
+  .section-head kbd {
+    margin-left: auto;
+    border: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-muted);
+  }
+
+  /* Pestañas del lateral: cabecera de panel de 32px, el activo subrayado con el acento. */
+  /* Las pestañas se reparten el ancho a partes iguales, con el texto centrado. */
+  .tabs {
+    flex: none;
+    height: var(--h-header);
+    display: flex;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 0;
+    background: none;
+    padding: 0 var(--space-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    box-shadow: inset 0 -1px 0 transparent;
+  }
+  .tabs button:hover {
+    color: var(--text-primary);
+  }
+  .tabs button.sel {
+    color: var(--text-primary);
+    box-shadow: inset 0 -1px 0 var(--accent);
+  }
+
+  /* Divisor: línea de 1px; la zona de agarre (5px) es invisible y se solapa con los paneles. */
+  .splitter {
+    position: relative;
+    z-index: 5;
+    flex: none;
+    width: 1px;
+    cursor: col-resize;
+    background: var(--border-subtle);
+    transition: background-color var(--duration) var(--ease);
+  }
+  .splitter::before {
+    content: "";
+    position: absolute;
+    inset: 0 -2px;
+  }
+  .splitter:hover,
+  .splitter:active {
+    background: var(--accent);
+  }
+
+  /* ── Barra de estado ────────────────────────────────────────── */
+
+  .statusbar {
+    gap: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 100%;
+  }
+  .statusbar .link {
+    min-height: 0;
     font-size: inherit;
     color: inherit;
+  }
+  .statusbar .link:hover {
+    color: var(--text-primary);
+  }
+  .muted {
+    color: var(--text-muted);
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
   }
   .lsp.ready {
     color: var(--ok);
@@ -664,19 +875,35 @@
   }
   .bad {
     color: var(--danger);
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
   }
+  .hints {
+    color: var(--text-muted);
+    gap: var(--space-1);
+    overflow: hidden;
+  }
+  .hints kbd:not(:first-child) {
+    margin-left: var(--space-2);
+  }
+  /* Mejor ocultar las pistas que cortarlas a mitad. */
+  @media (max-width: 1180px) {
+    .hints {
+      display: none;
+    }
+  }
+
   .toast {
     position: fixed;
-    bottom: 40px;
+    bottom: calc(var(--h-header) + var(--space-2));
     left: 50%;
     transform: translateX(-50%);
-    padding: 10px 16px;
-    border-radius: 10px;
-    background: var(--text-strong);
-    color: var(--bg);
-    font-size: 13px;
-    box-shadow: var(--shadow);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    font-size: var(--fs-base);
+    box-shadow: var(--shadow-popover);
     z-index: 100;
     max-width: 70vw;
   }

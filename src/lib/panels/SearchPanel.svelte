@@ -4,6 +4,7 @@
   import { api, type FileMatches, type SearchOptions } from "../api";
   import { app } from "../store.svelte";
   import { basename } from "../platform";
+  import Icon from "../Icon.svelte";
 
   let query = $state("");
   let replacement = $state("");
@@ -77,12 +78,16 @@
 </script>
 
 <div class="search">
-  <div class="head">Buscar en el proyecto</div>
   <div class="form">
     <div class="row">
-      <button class="icon small" title="Mostrar reemplazar" onclick={() => (showReplace = !showReplace)}>
-        {showReplace ? "▾" : "▸"}
-      </button>
+      <button
+        class="icon small chev-btn"
+        class:open={showReplace}
+        title="Mostrar reemplazar"
+        aria-label="Mostrar reemplazar"
+        aria-expanded={showReplace}
+        onclick={() => (showReplace = !showReplace)}><Icon name="chevron" size={12} /></button
+      >
       <div class="field">
         <input
           bind:this={input}
@@ -104,7 +109,9 @@
         <div class="field">
           <input bind:value={replacement} placeholder={regex ? "Reemplazar ($1 = grupo)" : "Reemplazar"} />
           <div class="toggles">
-            <button title="Reemplazar todo" disabled={!total} onclick={() => replace(results.map((r) => r.file))}>⇄</button>
+            <button title="Reemplazar todo" aria-label="Reemplazar todo" disabled={!total} onclick={() => replace(results.map((r) => r.file))}
+              ><Icon name="swap" size={13} /></button
+            >
           </div>
         </div>
       </div>
@@ -118,13 +125,15 @@
     {#each results as f (f.file)}
       <div class="file">
         <button class="fname" onclick={() => (collapsed[f.file] = !collapsed[f.file])}>
-          <span class="chev">{collapsed[f.file] ? "▸" : "▾"}</span>
+          <span class="chev" class:open={!collapsed[f.file]}><Icon name="chevron" size={12} /></span>
           <span class="name">{basename(f.file)}</span>
           <span class="dir">{f.file.includes("/") ? f.file.slice(0, f.file.lastIndexOf("/")) : ""}</span>
           <span class="n">{f.matches.length}</span>
         </button>
         {#if showReplace}
-          <button class="icon small rep" title="Reemplazar en este archivo" onclick={() => replace([f.file])}>⇄</button>
+          <button class="icon small rep" title="Reemplazar en este archivo" aria-label="Reemplazar en este archivo" onclick={() => replace([f.file])}
+            ><Icon name="swap" size={13} /></button
+          >
         {/if}
       </div>
       {#if !collapsed[f.file]}
@@ -147,19 +156,11 @@
     min-height: 0;
     flex: 1;
   }
-  .head {
-    padding: 8px 12px 6px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
   .form {
-    padding: 0 8px 6px 4px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
+    padding: 0 var(--space-2) var(--space-1) var(--space-1);
   }
   .row {
     display: flex;
@@ -167,23 +168,30 @@
     gap: 2px;
   }
   .spacer-icon {
-    width: 22px;
     flex: none;
+    width: 22px;
   }
   .icon.small {
+    flex: none;
     width: 22px;
     height: 22px;
-    font-size: 11px;
-    flex: none;
+  }
+  .chev-btn :global(svg),
+  .chev :global(svg) {
+    transition: transform var(--duration-fast) var(--ease);
+  }
+  .chev-btn.open :global(svg),
+  .chev.open :global(svg) {
+    transform: rotate(90deg);
   }
   .field {
+    position: relative;
     flex: 1;
     min-width: 0;
-    position: relative;
   }
   .field input {
     width: 100%;
-    padding-right: 74px;
+    padding-right: 72px;
   }
   .toggles {
     position: absolute;
@@ -194,47 +202,60 @@
     gap: 1px;
   }
   .toggles button {
-    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    min-height: 0;
+    padding: 0 3px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
     background: none;
-    padding: 2px 4px;
-    font: 600 11px var(--font-mono);
-    color: var(--text-faint);
-    border-radius: 4px;
+    font: var(--fw-semibold) var(--fs-xs) var(--font-mono);
+    color: var(--text-muted);
+  }
+  .toggles button:hover {
+    color: var(--text-primary);
   }
   .toggles button.on {
-    background: var(--accent);
-    color: var(--accent-text);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
   .summary {
-    font-size: 11.5px;
+    min-height: 16px;
+    padding-left: 24px;
+    font-size: var(--fs-xs);
     color: var(--text-muted);
-    padding-left: 26px;
-    min-height: 15px;
   }
   .err {
     color: var(--danger);
   }
+
   .list {
     flex: 1;
     overflow: auto;
-    padding-bottom: 8px;
+    padding-bottom: var(--space-2);
   }
   .file {
     display: flex;
     align-items: center;
-    padding-right: 6px;
+    padding-right: var(--space-1);
   }
   .fname {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-1);
+    height: var(--h-row);
+    min-height: 0;
+    padding: 0 var(--space-2);
     border: none;
     border-radius: 0;
     background: none;
-    padding: 4px 8px;
-    font-size: 13px;
+    font-size: var(--fs-base);
     text-align: left;
   }
   .fname:hover,
@@ -242,53 +263,64 @@
     background: var(--bg-hover);
   }
   .chev {
-    font-size: 10px;
-    color: var(--text-faint);
-    width: 10px;
+    flex: none;
+    display: flex;
+    color: var(--text-muted);
   }
   .name {
-    font-weight: 600;
+    font-weight: var(--fw-medium);
     white-space: nowrap;
   }
   .dir {
     flex: 1;
-    color: var(--text-faint);
-    font-size: 11.5px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
   }
   .n {
-    font-size: 11px;
-    padding: 0 6px;
-    border-radius: 8px;
-    background: var(--bg-hover);
-    color: var(--text-muted);
+    flex: none;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-sm);
+    background: var(--bg-active);
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
+    text-align: center;
+    color: var(--text-secondary);
   }
   .match {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: var(--space-2);
     width: 100%;
+    height: 22px;
+    min-height: 0;
+    padding: 0 var(--space-2) 0 calc(var(--space-2) + 16px);
     border: none;
     border-radius: 0;
     background: none;
-    padding: 2px 8px 2px 26px;
     text-align: left;
-    font-size: 12.5px;
+    font-size: var(--fs-sm);
   }
   .ln {
     flex: none;
-    min-width: 26px;
+    min-width: 3ch;
     text-align: right;
-    color: var(--text-faint);
-    font: 11px var(--font-mono);
-    padding-top: 2px;
+    font: var(--fs-xs) var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
   }
   .txt {
-    white-space: nowrap;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: var(--text-muted);
+    white-space: nowrap;
+    color: var(--text-secondary);
   }
   mark {
     background: var(--search-match);
